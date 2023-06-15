@@ -1,0 +1,165 @@
+syntax = "proto3";
+
+package repobuilder;
+option java_package = "net.conradwood.golang.apis.repobuilder";
+import "golang.conradwood.net/apis/common/common.proto";
+import "golang.conradwood.net/apis/auth/auth.proto";
+
+// we create a repository in the gitserver, here we track progress whilst it goes through various stages in the create process
+message TrackerGitRepository {
+  uint64 ID = 1;
+  uint64 CreateRequestID = 2;
+  uint32 CreateType = 3;      // 0 => web
+  uint64 RepositoryID = 4;    // the git repositoryID
+  string URLHost = 5;         // the host under which it is accessible
+  string URLPath = 6;         // the path under which it is accessible
+  bool RepositoryCreated = 7; // true once we created the repo in the gitserver
+  bool SourceInstalled = 8;   // true if we commited the "template" source code
+  string PackageID = 9;
+  string PackageName = 10;     // e.g. apis.conradwood.net/servicename
+  string ProtoFilename = 11;   // filename relative to to repo root (e.g. protos/golang.conradwood.net/apis/foo.proto
+  bool ProtoSubmitted = 12;    // true if we submitted our proto to protorenderer
+  bool ProtoCommitted = 13;    // true if we committed our proto in git repo
+  uint64 MinProtoVersion = 14; // minimum version of protorenderer we need
+  string Context = 15;
+  string UserID = 16;             // userid who created this request (as mirred by 'Context')
+  bool PermissionsCreated = 17;   // true if permissions were successfully created
+  bool SecureArgsCreated = 18;    // true if all the secureargs are created (e.g. token & db)
+  string ServiceID = 19;          // if we created a service and this is the ServiceID (rpcinterceptor)
+  string ServiceUserID = 20;      // if we created a service user account this is the userid (auth)
+  string ServiceToken = 21;       // the service token we will use for the new service
+  bool Finalised = 22;            // if this is true, no further action will be taken on this repo
+  bool PatchRepo = 23;            // if true, repo will be patched to match deployment and service name etc. If not it will be straight 'fork'
+  uint64 SourceRepositoryID = 24; // which repo do we clone?
+  bool NotificationSent=25; // if true notification was sent
+}
+// log for a reporequest
+message TrackerLog {
+  uint64 ID = 1;
+  uint64 CreateRequestID = 2;
+  uint32 CreateType = 3; // 0 => web
+  string LogMessage = 4; // yacloud admins only
+  string PublicMessage = 5;
+  uint32 Occured = 6; // unix epoch timestamp
+  bool Success = 7;   // if true it worked
+  string Task = 8;    // each failed task must eventually have a 'success'
+}
+
+message CreateWebRepoRequest {
+  uint64 ID = 1; // leave at zero when saving a new one
+  // A free text description upto 2000 characters
+  string Description = 2;
+  // a short name
+  string Name = 3;
+  // which language shall we prepare this for?
+  common.ProgrammingLanguage Language = 4;
+  /*
+    which domain shall the repo be served under? (this will be 'git.domain.com')
+    the A-Record for 'git.domain.com' must exist already.
+    Example: Reponame == "stuffrepo", Domain == "foo.com"
+    git clone https://git.foo.com/git/stuffrepo
+  */
+  string Domain = 5;
+  /*
+   the repository name. A "repository name" is somewhat virtual. It is possible to serve the same repository
+under multiple domains and path if required. this is the 'initial' host & path.
+  */
+  string RepoName = 6;
+  /*
+The Servicename is used to register and find the service. ServiceName and Domain are used to route to a specific service
+   */
+  string ServiceName = 7;
+  /*
+   list of groups who may /view/ this service. a group which has no viewing rights will neither see its registration, nor have any sort of access to it.
+   */
+  repeated string VisibilityGroupIDs = 8;
+  /*
+   list of groupids who may /use/ this service. These users may not have access to the source or binary, but are granted access to view the service and use its
+   api
+   */
+  repeated string AccessGroupIDs = 9;
+  /*
+   list of groupids who may /develop/ this service
+  */
+  repeated string DeveloperGroupIDs = 10;
+  // domain under which proto will be created, e.g. golang.singingcat.net
+  string ProtoDomain = 11;
+}
+
+// if this exists than the repo create request is "complete" (successful or not)
+message RepoCreateStatus {
+  uint64 ID = 1;
+  uint64 CreateRequestID = 2;
+  uint32 CreateType = 3; // 0 => web
+  bool Success = 4;      // true if it's successfully set up
+  string Error = 5;      // if it is not successful, here's a message
+}
+message CreateRepoResponse {
+  uint64 RequestID = 1; // ID of this request. poll this for updates...
+  bool Finished = 2;    // true if this is completed
+  bool Success = 3;     // true if it's successfully set up
+  string Error = 4;     // if it is not successful, here's a message
+  string URL=5; // full url of new repo
+}
+message RepoStatusRequest {
+  uint64 RequestID = 1; // ID of this request
+}
+
+message RepoDomain {
+  string Domain = 1; // e.g. "singingcat.net"
+}
+message Language {
+  uint64 ID = 1;   // e.g. "1"
+  string Name = 2; // e.g. "Go"
+}
+
+message Choices {
+  repeated RepoDomain Domains = 1; // domains available for the current user
+  repeated Language Languages = 2; // programming languages we support
+  repeated auth.Group Groups = 3;  // groups available for this user
+}
+
+message ForkRequest {
+  uint64 RepositoryID = 1; // the repository we're forking
+  string Name = 2;         // name of artefact
+  string Domain = 3;       // domain to serve it at
+  string RepoName = 4;     // path to serve it at
+  /*
+   list of groups who may /view/ this service. a group which has no viewing rights will neither see its registration, nor have any sort of access to it.
+   */
+  repeated string VisibilityGroupIDs = 5;
+  /*
+   list of groupids who may /use/ this service. These users may not have access to the source or binary, but are granted access to view the service and use its
+   api
+   */
+  repeated string AccessGroupIDs = 6;
+  /*
+   list of groupids who may /develop/ this service
+  */
+  repeated string DeveloperGroupIDs = 7;
+}
+
+// some repos are created and patched AFTER they've been created. typically they are created read-only, then patched, and then marked as read/write
+message LatePatchingQueue {
+  uint64 ID=1;
+  uint64 RepositoryID=2 [(common.sql_unique)="true"]; // repo to patch
+  uint32 EntryCreated=3; // timestamp
+  uint32 LastAttempt=4; // timestamp of last attempt to patch
+}
+
+// Build a Website Repository
+service RepoBuilder {
+  // get the status of a previously submitted create request
+  rpc GetRepoStatus(RepoStatusRequest) returns (CreateRepoResponse);
+  // create a web-repo component
+  rpc CreateWebRepo(CreateWebRepoRequest) returns (CreateRepoResponse);
+  // get choices for "creating a repo" for the current user, for example, this returns the Domains the particular user may create repos in
+  rpc GetRepoChoices(common.Void) returns (Choices);
+  // trigger a run over all pending requests (also done periodically)
+  rpc RetriggerAll(common.Void) returns (common.Void);
+  // limited to 'prober' - this first asks gitserver to reset a repo and then recreates it (more-or-less) from scratch
+  rpc RecreateWebRepo(CreateWebRepoRequest) returns (CreateRepoResponse);
+  rpc Fork(ForkRequest) returns (CreateRepoResponse);
+  // create a user-firmware repo
+  rpc CreateUserFirmwareRepo(CreateWebRepoRequest) returns (CreateRepoResponse);
+}
