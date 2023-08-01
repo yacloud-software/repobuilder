@@ -77,12 +77,12 @@ func create_web_repo(req *pb.TrackerGitRepository) error {
 	}
 	err := createGitConfig()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create git config %w", err)
 	}
 	c := &Creator{tgr: req}
 	err = c.setup()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to setup %w", err)
 	}
 	c.create()
 	return nil
@@ -534,7 +534,7 @@ func (c *Creator) Printf(format string, args ...interface{}) {
 func createGitConfig() error {
 	h, err := utils.HomeDir()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get homedir %w", err)
 	}
 	gitconfig := `[user]
         name = RepoBuilder
