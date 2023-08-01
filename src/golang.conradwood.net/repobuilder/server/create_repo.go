@@ -399,16 +399,9 @@ func (c *Creator) LoadStatus() error {
 
 // restore context from database
 func (c *Creator) RestoreContext() error {
-	ctx, err := auth.RecreateContextWithTimeout(time.Duration(10*time.Second), []byte(c.tgr.Context))
+	ctx, err := authremote.ContextForUserID(c.tgr.UserID)
 	if err != nil {
-		return fmt.Errorf("unable to recreate context for user \"%s\" from trackergitrepo id %d: %w", c.tgr.UserID, c.tgr.ID, err)
-	}
-	u := auth.GetUser(ctx)
-	if u != nil {
-		ctx, err = authremote.ContextForUserID(u.ID)
-		if err != nil {
-			return err
-		}
+		return fmt.Errorf("Unable to get context for user: %w", err)
 	}
 	c.ctx = ctx
 	return nil
