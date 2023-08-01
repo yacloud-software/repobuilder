@@ -401,7 +401,7 @@ func (c *Creator) LoadStatus() error {
 func (c *Creator) RestoreContext() error {
 	ctx, err := auth.RecreateContextWithTimeout(time.Duration(10*time.Second), []byte(c.tgr.Context))
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to recreate context from trackergitrepo id %d: %w", c.tgr.ID, err)
 	}
 	u := auth.GetUser(ctx)
 	if u != nil {
