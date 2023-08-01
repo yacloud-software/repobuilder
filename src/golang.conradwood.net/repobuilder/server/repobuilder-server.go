@@ -162,10 +162,6 @@ func (e *repoBuilderServer) CreateWebRepo(ctx context.Context, req *pb.CreateWeb
 	if req.ProtoDomain == "" {
 		req.ProtoDomain = req.Domain
 	}
-	ctxs, err := auth.SerialiseContextToString(ctx)
-	if err != nil {
-		return nil, err
-	}
 
 	id, err := WebRepoRequest_store.Save(ctx, req)
 	if err != nil {
@@ -176,7 +172,6 @@ func (e *repoBuilderServer) CreateWebRepo(ctx context.Context, req *pb.CreateWeb
 	tu := &pb.TrackerGitRepository{
 		CreateRequestID: id,
 		CreateType:      TYPE_WEBREPO,
-		Context:         ctxs,
 		UserID:          u.ID,
 		PatchRepo:       true, // patch repo to match servicename and deployment etc
 	}
@@ -210,10 +205,6 @@ func (e *repoBuilderServer) RecreateWebRepo(ctx context.Context, req *pb.CreateW
 	if err != nil {
 		return nil, err
 	}
-	ctxs, err := auth.SerialiseContextToString(ctx)
-	if err != nil {
-		return nil, err
-	}
 
 	nreq.Language = req.Language
 
@@ -241,7 +232,6 @@ func (e *repoBuilderServer) RecreateWebRepo(ctx context.Context, req *pb.CreateW
 
 	tgs.UserID = u.ID
 	// which steps do we want to repeat? marking those as 'false'
-	tgs.Context = ctxs
 	tgs.SourceInstalled = false
 	tgs.Finalised = false
 	tgs.ProtoSubmitted = false
@@ -294,11 +284,6 @@ func (e *repoBuilderServer) Fork(ctx context.Context, req *pb.ForkRequest) (*pb.
 		RepoName: req.RepoName,
 	}
 
-	ctxs, err := auth.SerialiseContextToString(ctx)
-	if err != nil {
-		return nil, err
-	}
-
 	id, err := WebRepoRequest_store.Save(ctx, wr)
 	if err != nil {
 		return nil, err
@@ -308,7 +293,6 @@ func (e *repoBuilderServer) Fork(ctx context.Context, req *pb.ForkRequest) (*pb.
 	tu := &pb.TrackerGitRepository{
 		CreateRequestID:    id,
 		CreateType:         TYPE_WEBREPO,
-		Context:            ctxs,
 		UserID:             u.ID,
 		PatchRepo:          false, // patch repo to match servicename and deployment etc
 		SourceRepositoryID: req.RepositoryID,
