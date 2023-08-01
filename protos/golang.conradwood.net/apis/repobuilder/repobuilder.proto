@@ -21,7 +21,7 @@ message TrackerGitRepository {
   bool ProtoSubmitted = 12;    // true if we submitted our proto to protorenderer
   bool ProtoCommitted = 13;    // true if we committed our proto in git repo
   uint64 MinProtoVersion = 14; // minimum version of protorenderer we need
-  string Context = 15;
+  //  string Context = 15;
   string UserID = 16;             // userid who created this request (as mirred by 'Context')
   bool PermissionsCreated = 17;   // true if permissions were successfully created
   bool SecureArgsCreated = 18;    // true if all the secureargs are created (e.g. token & db)
