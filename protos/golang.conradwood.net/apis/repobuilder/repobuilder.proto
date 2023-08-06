@@ -1,6 +1,7 @@
 syntax = "proto3";
 
 package repobuilder;
+option go_package = "golang.conradwood.net/apis/repobuilder";
 option java_package = "net.conradwood.golang.apis.repobuilder";
 import "golang.conradwood.net/apis/common/common.proto";
 import "golang.conradwood.net/apis/auth/auth.proto";
