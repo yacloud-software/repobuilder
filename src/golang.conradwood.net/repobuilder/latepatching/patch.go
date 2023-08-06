@@ -16,8 +16,9 @@ import (
 )
 
 type TemplateData struct {
-	GO_PROTOPACKAGE   string
-	JAVA_PROTOPACKAGE string
+	FQDN_GO_PROTOPACKAGE string
+	GO_PROTOPACKAGE      string
+	JAVA_PROTOPACKAGE    string
 }
 
 func valid_proto_go(in string) string {
@@ -46,8 +47,9 @@ func patch(lpq *pb.LatePatchingQueue) error {
 	pn := valid_proto_go(repo.ArtefactName)
 	protofilename := fmt.Sprintf("protos/userprotos.singingcat.net/%s/%s/%s.proto", repo.CreateUser, pn, pn)
 	td := &TemplateData{
-		GO_PROTOPACKAGE:   to_proto_package_name(repo.ArtefactName),
-		JAVA_PROTOPACKAGE: "repobuilder.latepatching does not yet support java packages",
+		FQDN_GO_PROTOPACKAGE: to_fqdn_go_proto_package_name(protofilename),
+		GO_PROTOPACKAGE:      to_proto_package_name(repo.ArtefactName),
+		JAVA_PROTOPACKAGE:    "repobuilder.latepatching does not yet support java packages",
 	}
 	content, err := create_patch_file("protofile.template", td)
 	if err != nil {
@@ -122,5 +124,14 @@ func writeFile(filename string, content []byte) error {
 func to_proto_package_name(pkg_name string) string {
 	res := strings.ToLower(pkg_name)
 	res = strings.ReplaceAll(res, "-", "_")
+	return res
+}
+
+// wants a path, like "protos/golang.yacloud.eu/apis/foo/foo.proto"
+func to_fqdn_go_proto_package_name(pkg_name string) string {
+	res := strings.ToLower(pkg_name)
+	res = strings.ReplaceAll(res, "-", "_")
+	res = filepath.Dir(res)
+	res = strings.TrimPrefix(res, "protos/")
 	return res
 }
