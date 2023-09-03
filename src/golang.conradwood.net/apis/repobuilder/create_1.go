@@ -1,6 +1,6 @@
 // client create: RepoBuilderClient
 /*
-  Created by /srv/home/cnw/devel/go/go-tools/src/golang.conradwood.net/gotools/protoc-gen-cnw/protoc-gen-cnw.go
+  Created by /home/cnw/devel/go/yatools/src/golang.yacloud.eu/yatools/protoc-gen-cnw/protoc-gen-cnw.go
 */
 
 /* geninfo:
@@ -13,7 +13,7 @@
    varname   : client_RepoBuilderClient_0
    clientname: RepoBuilderClient
    servername: RepoBuilderServer
-   gscvname  : repobuilder.RepoBuilder
+   gsvcname  : repobuilder.RepoBuilder
    lockname  : lock_RepoBuilderClient_0
    activename: active_RepoBuilderClient_0
 */
@@ -46,3 +46,7 @@ func GetRepoBuilderClient() RepoBuilderClient {
 }
 
 func RepoBuilderLookupID() string { return "repobuilder.RepoBuilder" } // returns the ID suitable for lookup in the registry. treat as opaque, subject to change.
+
+func init() {
+   client.RegisterDependency("repobuilder.RepoBuilder")
+}
