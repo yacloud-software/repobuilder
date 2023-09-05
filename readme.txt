@@ -12,3 +12,4 @@ delete from repocreatestatus where createrequestid = [ID];
 update trackergitrepository set sourceinstalled=false,protosubmitted=false,protocommitted=false,finalised=false,patchrepo=false,repositorycreated=false where createrequestid = [ID];
 
 
+
