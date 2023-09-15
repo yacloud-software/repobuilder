@@ -4,6 +4,9 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"golang.conradwood.net/apis/artefact"
+	"golang.conradwood.net/apis/buildrepo"
+	"golang.conradwood.net/apis/common"
 	"golang.conradwood.net/apis/email"
 	gitpb "golang.conradwood.net/apis/gitserver"
 	pb "golang.conradwood.net/apis/repobuilder"
@@ -353,6 +356,23 @@ func (c *Creator) GitRepository() error {
 			return err
 		}
 	}
+	ctx := authremote.Context()
+	bm, err := buildrepo.GetBuildRepoManagerClient().GetManagerInfo(ctx, &common.Void{})
+	if err != nil {
+		return err
+	}
+	brepodomain := bm.Domain
+
+	ar, err := artefact.GetArtefactClient().CreateArtefactIfRequired(ctx,
+		&artefact.CreateArtefactRequest{
+			ArtefactName:    c.req.RepoName,
+			BuildRepoDomain: brepodomain,
+		},
+	)
+	if err != nil {
+		return err
+	}
+	c.tgr.ArtefactID = ar.Meta.ID
 
 	return nil
 }

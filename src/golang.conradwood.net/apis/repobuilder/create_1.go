@@ -49,4 +49,5 @@ func RepoBuilderLookupID() string { return "repobuilder.RepoBuilder" } // return
 
 func init() {
    client.RegisterDependency("repobuilder.RepoBuilder")
+   AddService("repobuilder.RepoBuilder")
 }

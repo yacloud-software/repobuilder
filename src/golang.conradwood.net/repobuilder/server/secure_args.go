@@ -32,6 +32,7 @@ func (c *Creator) CreateSecureArgs() error {
 	ctx := authremote.Context()
 	_, err := secureargs.GetSecureArgsClient().SetArg(ctx, &secureargs.SetArgRequest{
 		RepositoryID: c.tgr.RepositoryID,
+		ArtefactID:   c.tgr.ArtefactID,
 		Name:         "TOKEN",
 		Value:        c.tgr.ServiceToken,
 	})
