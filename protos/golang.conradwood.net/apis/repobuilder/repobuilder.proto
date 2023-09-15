@@ -33,6 +33,7 @@ message TrackerGitRepository {
   bool PatchRepo = 23;            // if true, repo will be patched to match deployment and service name etc. If not it will be straight 'fork'
   uint64 SourceRepositoryID = 24; // which repo do we clone?
   bool NotificationSent=25; // if true notification was sent
+  uint64 ArtefactID=26; // artefactid for this new repo
 }
 // log for a reporequest
 message TrackerLog {
