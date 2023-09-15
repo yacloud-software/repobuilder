@@ -365,6 +365,7 @@ func (c *Creator) GitRepository() error {
 
 	ar, err := artefact.GetArtefactClient().CreateArtefactIfRequired(ctx,
 		&artefact.CreateArtefactRequest{
+			OrganisationID:  "repobuilder",
 			ArtefactName:    c.req.RepoName,
 			BuildRepoDomain: brepodomain,
 		},
