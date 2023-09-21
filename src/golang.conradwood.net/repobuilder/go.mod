@@ -13,7 +13,7 @@ require (
 	golang.conradwood.net/apis/protorenderer v1.1.2580
 	golang.conradwood.net/apis/repobuilder v1.1.1652
 	golang.conradwood.net/apis/secureargs v1.1.2580
-	golang.conradwood.net/go-easyops v0.1.19748
+	golang.conradwood.net/go-easyops v0.1.20370
 	google.golang.org/grpc v1.58.0
 )
 
@@ -29,7 +29,6 @@ require (
 	github.com/prometheus/common v0.44.0 // indirect
 	github.com/prometheus/procfs v0.11.1 // indirect
 	golang.conradwood.net/apis/autodeployer v1.1.2580 // indirect
-	golang.conradwood.net/apis/commondeploy v1.1.2580 // indirect
 	golang.conradwood.net/apis/deploymonkey v1.1.2580 // indirect
 	golang.conradwood.net/apis/echoservice v1.1.2580 // indirect
 	golang.conradwood.net/apis/errorlogger v1.1.2580 // indirect
@@ -38,7 +37,6 @@ require (
 	golang.conradwood.net/apis/h2gproxy v1.1.2580 // indirect
 	golang.conradwood.net/apis/objectstore v1.1.2580 // indirect
 	golang.conradwood.net/apis/registry v1.1.2580 // indirect
-	golang.conradwood.net/apis/rpcinterceptor v1.1.2580 // indirect
 	golang.org/x/net v0.15.0 // indirect
 	golang.org/x/sys v0.12.0 // indirect
 	golang.org/x/text v0.13.0 // indirect
