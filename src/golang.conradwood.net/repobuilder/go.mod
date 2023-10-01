@@ -13,7 +13,7 @@ require (
 	golang.conradwood.net/apis/protorenderer v1.1.2580
 	golang.conradwood.net/apis/repobuilder v1.1.1652
 	golang.conradwood.net/apis/secureargs v1.1.2580
-	golang.conradwood.net/go-easyops v0.1.20683
+	golang.conradwood.net/go-easyops v0.1.20970
 	google.golang.org/grpc v1.58.0
 )
 
