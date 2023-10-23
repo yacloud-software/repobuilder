@@ -49,7 +49,7 @@ func main() {
 	create_all_web_repos()
 
 	sd := server.NewServerDef()
-	sd.Port = *port
+	sd.SetPort(*port)
 	sd.Register = server.Register(
 		func(server *grpc.Server) error {
 			e := new(repoBuilderServer)
