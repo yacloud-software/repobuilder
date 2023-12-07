@@ -73,3 +73,4 @@ func handle_late_patchers() {
 		db.DefaultDBLatePatchingQueue().DeleteByID(ctx, lpq.ID)
 	}
 }
+

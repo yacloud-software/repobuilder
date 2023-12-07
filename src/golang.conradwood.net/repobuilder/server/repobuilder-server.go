@@ -50,13 +50,13 @@ func main() {
 
 	sd := server.NewServerDef()
 	sd.SetPort(*port)
-	sd.Register = server.Register(
+	sd.SetRegister(server.Register(
 		func(server *grpc.Server) error {
 			e := new(repoBuilderServer)
 			pb.RegisterRepoBuilderServer(server, e)
 			return nil
 		},
-	)
+	))
 	err = server.ServerStartup(sd)
 	utils.Bail("Unable to start server", err)
 	os.Exit(0)
@@ -387,3 +387,4 @@ func LanguageToRepo(language common.ProgrammingLanguage) uint64 {
 	}
 	return 0
 }
+

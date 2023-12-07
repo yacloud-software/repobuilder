@@ -120,3 +120,4 @@ func (gr *GitReference) CommitAndPush() error {
 func (gr *GitReference) GitDirAbsFilename() string {
 	return gr.localgitdir
 }
+
