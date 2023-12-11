@@ -121,3 +121,4 @@ func (gr *GitReference) GitDirAbsFilename() string {
 	return gr.localgitdir
 }
 
+
