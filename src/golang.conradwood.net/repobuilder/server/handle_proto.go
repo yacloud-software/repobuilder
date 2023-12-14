@@ -38,8 +38,12 @@ func (c *Creator) SubmitProto() error {
 		Compilers:       []pr.CompilerType{pr.CompilerType_GOLANG},
 		AddProtoRequest: pf})
 	if err != nil {
-		fmt.Printf("Compile Error: %s\n", v.CompileError)
+		fmt.Printf("(1) Compile Error: %s\n", err)
 		return err
+	}
+	if v.CompileError != "" {
+		fmt.Printf("(2) Compile Error: %s\n", v.CompileError)
+		return fmt.Errorf("%s", v.CompileError)
 	}
 	c.tgr.PackageName = "foo_compiled_handle_proto.package"
 	c.tgr.ProtoSubmitted = true
@@ -79,9 +83,3 @@ func (c *Creator) fixCompiledProtoFilename(fname string) string {
 	return fname
 
 }
-
-
-
-
-
-
