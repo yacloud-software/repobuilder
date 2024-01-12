@@ -30,7 +30,7 @@ func Compile(ctx context.Context, repoid uint64, dir, filename string) (*ProtoCo
 			RepositoryID: repoid,
 		},
 	}
-	if utils.FileExists(dir + "/proto_files") {
+	if utils.FileExists(dir+"/proto_files") || utils.FileExists(dir+"/c/userapp/proto_files") {
 		creq.Compilers = append(creq.Compilers, pr.CompilerType_NANOPB)
 		fmt.Printf("NANOPB compile...\n")
 	}
@@ -46,7 +46,7 @@ func Compile(ctx context.Context, repoid uint64, dir, filename string) (*ProtoCo
 		var fs []*File
 
 		if cf.Compiler == pr.CompilerType_NANOPB {
-			sname := "proto_files/nanopb/" + filepath.Base(cf.Filename)
+			sname := "c/userapp/proto_files/nanopb/" + filepath.Base(cf.Filename)
 			fs = append(fs, &File{Filename: sname, Content: cf.Content})
 		}
 		pcr.Files = append(pcr.Files, fs...)
@@ -54,9 +54,3 @@ func Compile(ctx context.Context, repoid uint64, dir, filename string) (*ProtoCo
 	}
 	return pcr, nil
 }
-
-
-
-
-
-
