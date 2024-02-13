@@ -406,7 +406,7 @@ func (a *DBCreateWebRepoRequest) SelectColsQualified() string {
 	return "" + a.SQLTablename + ".id," + a.SQLTablename + ".description, " + a.SQLTablename + ".name, " + a.SQLTablename + ".domain, " + a.SQLTablename + ".reponame, " + a.SQLTablename + ".servicename, " + a.SQLTablename + ".protodomain"
 }
 
-func (a *DBCreateWebRepoRequest) FromRows(ctx context.Context, rows *gosql.Rows) ([]*savepb.CreateWebRepoRequest, error) {
+func (a *DBCreateWebRepoRequest) FromRowsOld(ctx context.Context, rows *gosql.Rows) ([]*savepb.CreateWebRepoRequest, error) {
 	var res []*savepb.CreateWebRepoRequest
 	for rows.Next() {
 		foo := savepb.CreateWebRepoRequest{}
@@ -418,6 +418,30 @@ func (a *DBCreateWebRepoRequest) FromRows(ctx context.Context, rows *gosql.Rows)
 	}
 	return res, nil
 }
+func (a *DBCreateWebRepoRequest) FromRows(ctx context.Context, rows *gosql.Rows) ([]*savepb.CreateWebRepoRequest, error) {
+	var res []*savepb.CreateWebRepoRequest
+	for rows.Next() {
+		// SCANNER:
+		foo := &savepb.CreateWebRepoRequest{}
+		// create the non-nullable pointers
+		// create variables for scan results
+		scanTarget_0 := &foo.ID
+		scanTarget_1 := &foo.Description
+		scanTarget_2 := &foo.Name
+		scanTarget_3 := &foo.Domain
+		scanTarget_4 := &foo.RepoName
+		scanTarget_5 := &foo.ServiceName
+		scanTarget_6 := &foo.ProtoDomain
+		err := rows.Scan(scanTarget_0, scanTarget_1, scanTarget_2, scanTarget_3, scanTarget_4, scanTarget_5, scanTarget_6)
+		// END SCANNER
+
+		if err != nil {
+			return nil, a.Error(ctx, "fromrow-scan", err)
+		}
+		res = append(res, foo)
+	}
+	return res, nil
+}
 
 /**********************************************************************
 * Helper to create table and columns
@@ -425,20 +449,39 @@ func (a *DBCreateWebRepoRequest) FromRows(ctx context.Context, rows *gosql.Rows)
 func (a *DBCreateWebRepoRequest) CreateTable(ctx context.Context) error {
 	csql := []string{
 		`create sequence if not exists ` + a.SQLTablename + `_seq;`,
-		`CREATE TABLE if not exists ` + a.SQLTablename + ` (id integer primary key default nextval('` + a.SQLTablename + `_seq'),description text not null  ,name text not null  ,domain text not null  ,reponame text not null  ,servicename text not null  ,protodomain text not null  );`,
-		`CREATE TABLE if not exists ` + a.SQLTablename + `_archive (id integer primary key default nextval('` + a.SQLTablename + `_seq'),description text not null  ,name text not null  ,domain text not null  ,reponame text not null  ,servicename text not null  ,protodomain text not null  );`,
+		`CREATE TABLE if not exists ` + a.SQLTablename + ` (id integer primary key default nextval('` + a.SQLTablename + `_seq'),description text not null ,name text not null ,domain text not null ,reponame text not null ,servicename text not null ,protodomain text not null );`,
+		`CREATE TABLE if not exists ` + a.SQLTablename + `_archive (id integer primary key default nextval('` + a.SQLTablename + `_seq'),description text not null ,name text not null ,domain text not null ,reponame text not null ,servicename text not null ,protodomain text not null );`,
 		`ALTER TABLE createwebreporequest ADD COLUMN IF NOT EXISTS description text not null default '';`,
 		`ALTER TABLE createwebreporequest ADD COLUMN IF NOT EXISTS name text not null default '';`,
 		`ALTER TABLE createwebreporequest ADD COLUMN IF NOT EXISTS domain text not null default '';`,
 		`ALTER TABLE createwebreporequest ADD COLUMN IF NOT EXISTS reponame text not null default '';`,
 		`ALTER TABLE createwebreporequest ADD COLUMN IF NOT EXISTS servicename text not null default '';`,
 		`ALTER TABLE createwebreporequest ADD COLUMN IF NOT EXISTS protodomain text not null default '';`,
+
+		`ALTER TABLE createwebreporequest_archive ADD COLUMN IF NOT EXISTS description text not null  default '';`,
+		`ALTER TABLE createwebreporequest_archive ADD COLUMN IF NOT EXISTS name text not null  default '';`,
+		`ALTER TABLE createwebreporequest_archive ADD COLUMN IF NOT EXISTS domain text not null  default '';`,
+		`ALTER TABLE createwebreporequest_archive ADD COLUMN IF NOT EXISTS reponame text not null  default '';`,
+		`ALTER TABLE createwebreporequest_archive ADD COLUMN IF NOT EXISTS servicename text not null  default '';`,
+		`ALTER TABLE createwebreporequest_archive ADD COLUMN IF NOT EXISTS protodomain text not null  default '';`,
 	}
+
 	for i, c := range csql {
 		_, e := a.DB.ExecContext(ctx, fmt.Sprintf("create_"+a.SQLTablename+"_%d", i), c)
 		if e != nil {
 			return e
 		}
+	}
+
+	// these are optional, expected to fail
+	csql = []string{
+		// Indices:
+
+		// Foreign keys:
+
+	}
+	for i, c := range csql {
+		a.DB.ExecContextQuiet(ctx, fmt.Sprintf("create_"+a.SQLTablename+"_%d", i), c)
 	}
 	return nil
 }
@@ -452,9 +495,3 @@ func (a *DBCreateWebRepoRequest) Error(ctx context.Context, q string, e error) e
 	}
 	return fmt.Errorf("[table="+a.SQLTablename+", query=%s] Error: %s", q, e)
 }
-
-
-
-
-
-

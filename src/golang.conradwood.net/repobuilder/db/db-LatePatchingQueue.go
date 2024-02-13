@@ -313,7 +313,7 @@ func (a *DBLatePatchingQueue) SelectColsQualified() string {
 	return "" + a.SQLTablename + ".id," + a.SQLTablename + ".repositoryid, " + a.SQLTablename + ".entrycreated, " + a.SQLTablename + ".lastattempt"
 }
 
-func (a *DBLatePatchingQueue) FromRows(ctx context.Context, rows *gosql.Rows) ([]*savepb.LatePatchingQueue, error) {
+func (a *DBLatePatchingQueue) FromRowsOld(ctx context.Context, rows *gosql.Rows) ([]*savepb.LatePatchingQueue, error) {
 	var res []*savepb.LatePatchingQueue
 	for rows.Next() {
 		foo := savepb.LatePatchingQueue{}
@@ -325,6 +325,27 @@ func (a *DBLatePatchingQueue) FromRows(ctx context.Context, rows *gosql.Rows) ([
 	}
 	return res, nil
 }
+func (a *DBLatePatchingQueue) FromRows(ctx context.Context, rows *gosql.Rows) ([]*savepb.LatePatchingQueue, error) {
+	var res []*savepb.LatePatchingQueue
+	for rows.Next() {
+		// SCANNER:
+		foo := &savepb.LatePatchingQueue{}
+		// create the non-nullable pointers
+		// create variables for scan results
+		scanTarget_0 := &foo.ID
+		scanTarget_1 := &foo.RepositoryID
+		scanTarget_2 := &foo.EntryCreated
+		scanTarget_3 := &foo.LastAttempt
+		err := rows.Scan(scanTarget_0, scanTarget_1, scanTarget_2, scanTarget_3)
+		// END SCANNER
+
+		if err != nil {
+			return nil, a.Error(ctx, "fromrow-scan", err)
+		}
+		res = append(res, foo)
+	}
+	return res, nil
+}
 
 /**********************************************************************
 * Helper to create table and columns
@@ -332,17 +353,35 @@ func (a *DBLatePatchingQueue) FromRows(ctx context.Context, rows *gosql.Rows) ([
 func (a *DBLatePatchingQueue) CreateTable(ctx context.Context) error {
 	csql := []string{
 		`create sequence if not exists ` + a.SQLTablename + `_seq;`,
-		`CREATE TABLE if not exists ` + a.SQLTablename + ` (id integer primary key default nextval('` + a.SQLTablename + `_seq'),repositoryid bigint not null  unique  ,entrycreated integer not null  ,lastattempt integer not null  );`,
-		`CREATE TABLE if not exists ` + a.SQLTablename + `_archive (id integer primary key default nextval('` + a.SQLTablename + `_seq'),repositoryid bigint not null  unique  ,entrycreated integer not null  ,lastattempt integer not null  );`,
-		`ALTER TABLE latepatchingqueue ADD COLUMN IF NOT EXISTS repositoryid bigint not null unique  default 0;`,
+		`CREATE TABLE if not exists ` + a.SQLTablename + ` (id integer primary key default nextval('` + a.SQLTablename + `_seq'),repositoryid bigint not null ,entrycreated integer not null ,lastattempt integer not null );`,
+		`CREATE TABLE if not exists ` + a.SQLTablename + `_archive (id integer primary key default nextval('` + a.SQLTablename + `_seq'),repositoryid bigint not null ,entrycreated integer not null ,lastattempt integer not null );`,
+		`ALTER TABLE latepatchingqueue ADD COLUMN IF NOT EXISTS repositoryid bigint not null default 0;`,
 		`ALTER TABLE latepatchingqueue ADD COLUMN IF NOT EXISTS entrycreated integer not null default 0;`,
 		`ALTER TABLE latepatchingqueue ADD COLUMN IF NOT EXISTS lastattempt integer not null default 0;`,
+
+		`ALTER TABLE latepatchingqueue_archive ADD COLUMN IF NOT EXISTS repositoryid bigint not null  default 0;`,
+		`ALTER TABLE latepatchingqueue_archive ADD COLUMN IF NOT EXISTS entrycreated integer not null  default 0;`,
+		`ALTER TABLE latepatchingqueue_archive ADD COLUMN IF NOT EXISTS lastattempt integer not null  default 0;`,
 	}
+
 	for i, c := range csql {
 		_, e := a.DB.ExecContext(ctx, fmt.Sprintf("create_"+a.SQLTablename+"_%d", i), c)
 		if e != nil {
 			return e
 		}
+	}
+
+	// these are optional, expected to fail
+	csql = []string{
+		// Indices:
+		`create unique index if not exists uniq_latepatchingqueue_repositoryid on latepatchingqueue (repositoryid);`,
+		`alter table latepatchingqueue add constraint uniq_latepatchingqueue_repositoryid unique using index uniq_latepatchingqueue_repositoryid;`,
+
+		// Foreign keys:
+
+	}
+	for i, c := range csql {
+		a.DB.ExecContextQuiet(ctx, fmt.Sprintf("create_"+a.SQLTablename+"_%d", i), c)
 	}
 	return nil
 }
@@ -356,9 +395,3 @@ func (a *DBLatePatchingQueue) Error(ctx context.Context, q string, e error) erro
 	}
 	return fmt.Errorf("[table="+a.SQLTablename+", query=%s] Error: %s", q, e)
 }
-
-
-
-
-
-

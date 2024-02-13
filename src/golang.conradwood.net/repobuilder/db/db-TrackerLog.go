@@ -437,7 +437,7 @@ func (a *DBTrackerLog) SelectColsQualified() string {
 	return "" + a.SQLTablename + ".id," + a.SQLTablename + ".createrequestid, " + a.SQLTablename + ".createtype, " + a.SQLTablename + ".logmessage, " + a.SQLTablename + ".publicmessage, " + a.SQLTablename + ".occured, " + a.SQLTablename + ".success, " + a.SQLTablename + ".task"
 }
 
-func (a *DBTrackerLog) FromRows(ctx context.Context, rows *gosql.Rows) ([]*savepb.TrackerLog, error) {
+func (a *DBTrackerLog) FromRowsOld(ctx context.Context, rows *gosql.Rows) ([]*savepb.TrackerLog, error) {
 	var res []*savepb.TrackerLog
 	for rows.Next() {
 		foo := savepb.TrackerLog{}
@@ -449,6 +449,31 @@ func (a *DBTrackerLog) FromRows(ctx context.Context, rows *gosql.Rows) ([]*savep
 	}
 	return res, nil
 }
+func (a *DBTrackerLog) FromRows(ctx context.Context, rows *gosql.Rows) ([]*savepb.TrackerLog, error) {
+	var res []*savepb.TrackerLog
+	for rows.Next() {
+		// SCANNER:
+		foo := &savepb.TrackerLog{}
+		// create the non-nullable pointers
+		// create variables for scan results
+		scanTarget_0 := &foo.ID
+		scanTarget_1 := &foo.CreateRequestID
+		scanTarget_2 := &foo.CreateType
+		scanTarget_3 := &foo.LogMessage
+		scanTarget_4 := &foo.PublicMessage
+		scanTarget_5 := &foo.Occured
+		scanTarget_6 := &foo.Success
+		scanTarget_7 := &foo.Task
+		err := rows.Scan(scanTarget_0, scanTarget_1, scanTarget_2, scanTarget_3, scanTarget_4, scanTarget_5, scanTarget_6, scanTarget_7)
+		// END SCANNER
+
+		if err != nil {
+			return nil, a.Error(ctx, "fromrow-scan", err)
+		}
+		res = append(res, foo)
+	}
+	return res, nil
+}
 
 /**********************************************************************
 * Helper to create table and columns
@@ -456,8 +481,8 @@ func (a *DBTrackerLog) FromRows(ctx context.Context, rows *gosql.Rows) ([]*savep
 func (a *DBTrackerLog) CreateTable(ctx context.Context) error {
 	csql := []string{
 		`create sequence if not exists ` + a.SQLTablename + `_seq;`,
-		`CREATE TABLE if not exists ` + a.SQLTablename + ` (id integer primary key default nextval('` + a.SQLTablename + `_seq'),createrequestid bigint not null  ,createtype integer not null  ,logmessage text not null  ,publicmessage text not null  ,occured integer not null  ,success boolean not null  ,task text not null  );`,
-		`CREATE TABLE if not exists ` + a.SQLTablename + `_archive (id integer primary key default nextval('` + a.SQLTablename + `_seq'),createrequestid bigint not null  ,createtype integer not null  ,logmessage text not null  ,publicmessage text not null  ,occured integer not null  ,success boolean not null  ,task text not null  );`,
+		`CREATE TABLE if not exists ` + a.SQLTablename + ` (id integer primary key default nextval('` + a.SQLTablename + `_seq'),createrequestid bigint not null ,createtype integer not null ,logmessage text not null ,publicmessage text not null ,occured integer not null ,success boolean not null ,task text not null );`,
+		`CREATE TABLE if not exists ` + a.SQLTablename + `_archive (id integer primary key default nextval('` + a.SQLTablename + `_seq'),createrequestid bigint not null ,createtype integer not null ,logmessage text not null ,publicmessage text not null ,occured integer not null ,success boolean not null ,task text not null );`,
 		`ALTER TABLE trackerlog ADD COLUMN IF NOT EXISTS createrequestid bigint not null default 0;`,
 		`ALTER TABLE trackerlog ADD COLUMN IF NOT EXISTS createtype integer not null default 0;`,
 		`ALTER TABLE trackerlog ADD COLUMN IF NOT EXISTS logmessage text not null default '';`,
@@ -465,12 +490,32 @@ func (a *DBTrackerLog) CreateTable(ctx context.Context) error {
 		`ALTER TABLE trackerlog ADD COLUMN IF NOT EXISTS occured integer not null default 0;`,
 		`ALTER TABLE trackerlog ADD COLUMN IF NOT EXISTS success boolean not null default false;`,
 		`ALTER TABLE trackerlog ADD COLUMN IF NOT EXISTS task text not null default '';`,
+
+		`ALTER TABLE trackerlog_archive ADD COLUMN IF NOT EXISTS createrequestid bigint not null  default 0;`,
+		`ALTER TABLE trackerlog_archive ADD COLUMN IF NOT EXISTS createtype integer not null  default 0;`,
+		`ALTER TABLE trackerlog_archive ADD COLUMN IF NOT EXISTS logmessage text not null  default '';`,
+		`ALTER TABLE trackerlog_archive ADD COLUMN IF NOT EXISTS publicmessage text not null  default '';`,
+		`ALTER TABLE trackerlog_archive ADD COLUMN IF NOT EXISTS occured integer not null  default 0;`,
+		`ALTER TABLE trackerlog_archive ADD COLUMN IF NOT EXISTS success boolean not null  default false;`,
+		`ALTER TABLE trackerlog_archive ADD COLUMN IF NOT EXISTS task text not null  default '';`,
 	}
+
 	for i, c := range csql {
 		_, e := a.DB.ExecContext(ctx, fmt.Sprintf("create_"+a.SQLTablename+"_%d", i), c)
 		if e != nil {
 			return e
 		}
+	}
+
+	// these are optional, expected to fail
+	csql = []string{
+		// Indices:
+
+		// Foreign keys:
+
+	}
+	for i, c := range csql {
+		a.DB.ExecContextQuiet(ctx, fmt.Sprintf("create_"+a.SQLTablename+"_%d", i), c)
 	}
 	return nil
 }
@@ -484,9 +529,3 @@ func (a *DBTrackerLog) Error(ctx context.Context, q string, e error) error {
 	}
 	return fmt.Errorf("[table="+a.SQLTablename+", query=%s] Error: %s", q, e)
 }
-
-
-
-
-
-

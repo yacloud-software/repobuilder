@@ -344,7 +344,7 @@ func (a *DBRepoCreateStatus) SelectColsQualified() string {
 	return "" + a.SQLTablename + ".id," + a.SQLTablename + ".createrequestid, " + a.SQLTablename + ".createtype, " + a.SQLTablename + ".success, " + a.SQLTablename + ".error"
 }
 
-func (a *DBRepoCreateStatus) FromRows(ctx context.Context, rows *gosql.Rows) ([]*savepb.RepoCreateStatus, error) {
+func (a *DBRepoCreateStatus) FromRowsOld(ctx context.Context, rows *gosql.Rows) ([]*savepb.RepoCreateStatus, error) {
 	var res []*savepb.RepoCreateStatus
 	for rows.Next() {
 		foo := savepb.RepoCreateStatus{}
@@ -356,6 +356,28 @@ func (a *DBRepoCreateStatus) FromRows(ctx context.Context, rows *gosql.Rows) ([]
 	}
 	return res, nil
 }
+func (a *DBRepoCreateStatus) FromRows(ctx context.Context, rows *gosql.Rows) ([]*savepb.RepoCreateStatus, error) {
+	var res []*savepb.RepoCreateStatus
+	for rows.Next() {
+		// SCANNER:
+		foo := &savepb.RepoCreateStatus{}
+		// create the non-nullable pointers
+		// create variables for scan results
+		scanTarget_0 := &foo.ID
+		scanTarget_1 := &foo.CreateRequestID
+		scanTarget_2 := &foo.CreateType
+		scanTarget_3 := &foo.Success
+		scanTarget_4 := &foo.Error
+		err := rows.Scan(scanTarget_0, scanTarget_1, scanTarget_2, scanTarget_3, scanTarget_4)
+		// END SCANNER
+
+		if err != nil {
+			return nil, a.Error(ctx, "fromrow-scan", err)
+		}
+		res = append(res, foo)
+	}
+	return res, nil
+}
 
 /**********************************************************************
 * Helper to create table and columns
@@ -363,18 +385,35 @@ func (a *DBRepoCreateStatus) FromRows(ctx context.Context, rows *gosql.Rows) ([]
 func (a *DBRepoCreateStatus) CreateTable(ctx context.Context) error {
 	csql := []string{
 		`create sequence if not exists ` + a.SQLTablename + `_seq;`,
-		`CREATE TABLE if not exists ` + a.SQLTablename + ` (id integer primary key default nextval('` + a.SQLTablename + `_seq'),createrequestid bigint not null  ,createtype integer not null  ,success boolean not null  ,error text not null  );`,
-		`CREATE TABLE if not exists ` + a.SQLTablename + `_archive (id integer primary key default nextval('` + a.SQLTablename + `_seq'),createrequestid bigint not null  ,createtype integer not null  ,success boolean not null  ,error text not null  );`,
+		`CREATE TABLE if not exists ` + a.SQLTablename + ` (id integer primary key default nextval('` + a.SQLTablename + `_seq'),createrequestid bigint not null ,createtype integer not null ,success boolean not null ,error text not null );`,
+		`CREATE TABLE if not exists ` + a.SQLTablename + `_archive (id integer primary key default nextval('` + a.SQLTablename + `_seq'),createrequestid bigint not null ,createtype integer not null ,success boolean not null ,error text not null );`,
 		`ALTER TABLE repocreatestatus ADD COLUMN IF NOT EXISTS createrequestid bigint not null default 0;`,
 		`ALTER TABLE repocreatestatus ADD COLUMN IF NOT EXISTS createtype integer not null default 0;`,
 		`ALTER TABLE repocreatestatus ADD COLUMN IF NOT EXISTS success boolean not null default false;`,
 		`ALTER TABLE repocreatestatus ADD COLUMN IF NOT EXISTS error text not null default '';`,
+
+		`ALTER TABLE repocreatestatus_archive ADD COLUMN IF NOT EXISTS createrequestid bigint not null  default 0;`,
+		`ALTER TABLE repocreatestatus_archive ADD COLUMN IF NOT EXISTS createtype integer not null  default 0;`,
+		`ALTER TABLE repocreatestatus_archive ADD COLUMN IF NOT EXISTS success boolean not null  default false;`,
+		`ALTER TABLE repocreatestatus_archive ADD COLUMN IF NOT EXISTS error text not null  default '';`,
 	}
+
 	for i, c := range csql {
 		_, e := a.DB.ExecContext(ctx, fmt.Sprintf("create_"+a.SQLTablename+"_%d", i), c)
 		if e != nil {
 			return e
 		}
+	}
+
+	// these are optional, expected to fail
+	csql = []string{
+		// Indices:
+
+		// Foreign keys:
+
+	}
+	for i, c := range csql {
+		a.DB.ExecContextQuiet(ctx, fmt.Sprintf("create_"+a.SQLTablename+"_%d", i), c)
 	}
 	return nil
 }
@@ -388,9 +427,3 @@ func (a *DBRepoCreateStatus) Error(ctx context.Context, q string, e error) error
 	}
 	return fmt.Errorf("[table="+a.SQLTablename+", query=%s] Error: %s", q, e)
 }
-
-
-
-
-
-

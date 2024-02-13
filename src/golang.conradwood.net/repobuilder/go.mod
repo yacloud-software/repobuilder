@@ -3,16 +3,16 @@ module golang.conradwood.net/repobuilder
 go 1.18
 
 require (
-	golang.conradwood.net/apis/artefact v1.1.2643
+	golang.conradwood.net/apis/artefact v1.1.2792
 	golang.conradwood.net/apis/auth v1.1.2792
-	golang.conradwood.net/apis/buildrepo v1.1.2643
+	golang.conradwood.net/apis/buildrepo v1.1.2792
 	golang.conradwood.net/apis/common v1.1.2792
-	golang.conradwood.net/apis/email v1.1.2643
-	golang.conradwood.net/apis/gitserver v1.1.2643
-	golang.conradwood.net/apis/objectauth v1.1.2643
-	golang.conradwood.net/apis/protorenderer v1.1.2643
+	golang.conradwood.net/apis/email v1.1.2792
+	golang.conradwood.net/apis/gitserver v1.1.2792
+	golang.conradwood.net/apis/objectauth v1.1.2792
+	golang.conradwood.net/apis/protorenderer v1.1.2792
 	golang.conradwood.net/apis/repobuilder v1.1.1652
-	golang.conradwood.net/apis/secureargs v1.1.2643
+	golang.conradwood.net/apis/secureargs v1.1.2792
 	golang.conradwood.net/go-easyops v0.1.25069
 	google.golang.org/grpc v1.61.0
 )
@@ -23,26 +23,25 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/lib/pq v1.10.9 // indirect
-	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
-	github.com/prometheus/client_golang v1.17.0 // indirect
+	github.com/prometheus/client_golang v1.18.0 // indirect
 	github.com/prometheus/client_model v0.5.0 // indirect
-	github.com/prometheus/common v0.44.0 // indirect
+	github.com/prometheus/common v0.46.0 // indirect
 	github.com/prometheus/procfs v0.12.0 // indirect
-	golang.conradwood.net/apis/autodeployer v1.1.2643 // indirect
-	golang.conradwood.net/apis/deploymonkey v1.1.2643 // indirect
-	golang.conradwood.net/apis/echoservice v1.1.2643 // indirect
-	golang.conradwood.net/apis/errorlogger v1.1.2643 // indirect
-	golang.conradwood.net/apis/framework v1.1.2643 // indirect
+	golang.conradwood.net/apis/autodeployer v1.1.2792 // indirect
+	golang.conradwood.net/apis/deploymonkey v1.1.2792 // indirect
+	golang.conradwood.net/apis/echoservice v1.1.2792 // indirect
+	golang.conradwood.net/apis/errorlogger v1.1.2792 // indirect
+	golang.conradwood.net/apis/framework v1.1.2792 // indirect
 	golang.conradwood.net/apis/goeasyops v1.1.2792 // indirect
-	golang.conradwood.net/apis/h2gproxy v1.1.2643 // indirect
-	golang.conradwood.net/apis/objectstore v1.1.2643 // indirect
-	golang.conradwood.net/apis/registry v1.1.2643 // indirect
+	golang.conradwood.net/apis/h2gproxy v1.1.2792 // indirect
+	golang.conradwood.net/apis/objectstore v1.1.2792 // indirect
+	golang.conradwood.net/apis/registry v1.1.2792 // indirect
 	golang.org/x/net v0.21.0 // indirect
 	golang.org/x/sys v0.17.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
-	golang.yacloud.eu/apis/fscache v1.1.2643 // indirect
+	golang.yacloud.eu/apis/fscache v1.1.2792 // indirect
 	golang.yacloud.eu/apis/session v1.1.2792 // indirect
-	golang.yacloud.eu/apis/urlcacher v1.1.2643 // indirect
+	golang.yacloud.eu/apis/urlcacher v1.1.2792 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20231106174013-bbf56f31fb17 // indirect
 	google.golang.org/protobuf v1.32.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
