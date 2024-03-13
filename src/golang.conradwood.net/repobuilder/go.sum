@@ -63,8 +63,8 @@ golang.conradwood.net/apis/registry v1.1.2792 h1:TsZQ7aiWFzSMuR6t3WZw4pHxGwipQlq
 golang.conradwood.net/apis/registry v1.1.2792/go.mod h1:Z62Rr5W6fQygJNjZbgd8hJI7/VS006vXkcJQD9LY+Ps=
 golang.conradwood.net/apis/secureargs v1.1.2792 h1:1UVpeOKGNwiIkgeVcPMzu5DzjW0DwMd3UF/sHmGS2zA=
 golang.conradwood.net/apis/secureargs v1.1.2792/go.mod h1:umAaW8h1HiDQWK1kwCR/vLpsnXf66N6XFqhs9tp1D/k=
-golang.conradwood.net/go-easyops v0.1.25710 h1:rVz4tgTFHTnrFhG97fjxFynDnwwlCSaeZkwRVQbQ42U=
-golang.conradwood.net/go-easyops v0.1.25710/go.mod h1:DR0Yd9eyusrfO/qOXirQH5oiHQ0gpo97iTMN06qXQ1E=
+golang.conradwood.net/go-easyops v0.1.25823 h1:oQCxllyx1Hi7k1uIS6mhHrepdLUob33EAya0cG1suxA=
+golang.conradwood.net/go-easyops v0.1.25823/go.mod h1:DR0Yd9eyusrfO/qOXirQH5oiHQ0gpo97iTMN06qXQ1E=
 golang.org/x/net v0.22.0 h1:9sGLhx7iRIHEiX0oAJ3MRZMUCElJgy7Br1nO+AMN3Tc=
 golang.org/x/net v0.22.0/go.mod h1:JKghWKKOSdJwpW2GEx0Ja7fmaKnMsbu+MWVZTokSYmg=
 golang.org/x/sys v0.18.0 h1:DBdB3niSjOA/O0blCZBqDefyWNYveAYMNF1Wum0DYQ4=
