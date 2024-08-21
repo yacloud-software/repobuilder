@@ -3,98 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
-	"golang.conradwood.net/apis/common"
-	pr "golang.conradwood.net/apis/protorenderer"
-	"golang.conradwood.net/go-easyops/authremote"
-	"golang.conradwood.net/go-easyops/linux"
+	"golang.conradwood.net/apis/protorenderer"
 	"golang.conradwood.net/go-easyops/utils"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sync"
 )
-
-var (
-	upd_protoclient pr.ProtoRendererServiceClient
-)
-
-// updated .pb.go files in repo from protorenderer server
-func UpdateProtosInRepo(ctx context.Context, repopath string) error {
-	if !*use_vendor {
-		return nil
-	}
-	if repopath[0] != '/' {
-		return fmt.Errorf("UpdateProtosInRepo: requires absolute path (not %s)", repopath)
-	}
-	if upd_protoclient == nil {
-		upd_protoclient = pr.GetProtoRendererClient()
-	}
-	fmt.Printf("Updating protos in git repository \"%s\"...\n", repopath)
-	vendor, err := findVendor(repopath)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("Vendor directory: \"%s\"\n", vendor)
-	fls, err := upd_protoclient.GetPackages(ctx, &common.Void{})
-	if err != nil {
-		fmt.Printf("Failed to get proto packages: %s\n", err)
-		return err
-	}
-
-	ppr := &process_package_state{
-		recreated: make(map[string]bool),
-		vendor:    vendor,
-	}
-	wg := &sync.WaitGroup{}
-	for _, p := range fls.Packages {
-		wg.Add(1)
-		nctx := authremote.Context()
-		pp := &process_package{state: ppr, ctx: nctx, p: p}
-		go func(ppl *process_package) {
-			ppl.Process()
-			wg.Done()
-		}(pp)
-	}
-	wg.Wait()
-	if ppr.err != nil {
-		fmt.Printf("Failed to update protos: %s\n", ppr.err)
-		return ppr.err
-	}
-	fmt.Printf("git-adding .pb.go proto files to git repo\n")
-	// add all pb.go to repo...
-	cmd := []string{"git", "add"}
-	for k, _ := range ppr.recreated {
-		fmt.Printf("Git add: \"%s\"\n", k)
-		l := linux.New()
-		nc := append(cmd, k)
-		o, err := l.SafelyExecuteWithDir(nc, vendor, nil)
-		if err != nil {
-			fmt.Printf("Failed to add pb.go files: \n%s\n %s\n", o, err)
-			return err
-		}
-	}
-	//return fmt.Errorf("UpdateProtosInRepo: Not implemented")
-	return nil
-}
-
-// find vendor dir in repo
-func findVendor(repopath string) (string, error) {
-	files, err := ioutil.ReadDir(repopath + "/src")
-	if err != nil {
-		return "", err
-	}
-	if len(files) == 0 {
-		return "", fmt.Errorf("UpdateProtosInRepo: no files found under \"src\"...")
-	}
-	for _, f := range files {
-		v := repopath + "/src/" + f.Name() + "/vendor"
-		if utils.FileExists(v) {
-			return v, nil
-		}
-	}
-	return "", fmt.Errorf("UpdateProtosInRepo: no vendor dir found under \"src\"...")
-
-}
 
 type process_package_state struct {
 	err       error
@@ -141,7 +55,7 @@ func (pps *process_package_state) HandlePrefix(prefix string) error {
 }
 
 // save a .pb.go file
-func (pps *process_package_state) Save(fp *pr.FlatPackage, filename string, file *pr.File) error {
+func (pps *process_package_state) Save(fp *protorenderer.FlatPackage, filename string, file *protorenderer.File) error {
 	err := pps.HandlePrefix(fp.Prefix)
 	if err != nil {
 		return err
@@ -159,21 +73,21 @@ func (pps *process_package_state) Save(fp *pr.FlatPackage, filename string, file
 
 type process_package struct {
 	state *process_package_state
-	p     *pr.FlatPackage
+	p     *protorenderer.FlatPackage
 	ctx   context.Context
 }
 
 // process a flatpackage
 func (pp *process_package) Process() {
-	id := &pr.ID{ID: pp.p.ID}
-	fl, err := upd_protoclient.GetFilesGO(pp.ctx, id)
+	id := &protorenderer.ID{ID: pp.p.ID}
+	fl, err := protorenderer.GetProtoRendererClient().GetFilesGO(pp.ctx, id)
 	if err != nil {
 		pp.state.SetError(pp, err)
 		return
 	}
 	for _, fn := range fl.Files {
-		fr := &pr.FileRequest{PackageID: id, Filename: fn}
-		file, err := upd_protoclient.GetFile(pp.ctx, fr)
+		fr := &protorenderer.FileRequest{PackageID: id, Filename: fn}
+		file, err := protorenderer.GetProtoRendererClient().GetFile(pp.ctx, fr)
 		if err != nil {
 			pp.state.SetError(pp, err)
 			return
@@ -186,9 +100,3 @@ func (pp *process_package) Process() {
 		}
 	}
 }
-
-
-
-
-
-

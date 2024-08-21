@@ -16,7 +16,7 @@ import (
 	"golang.conradwood.net/go-easyops/tokens"
 	"golang.conradwood.net/go-easyops/utils"
 	"os"
-	"path/filepath"
+	//	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -219,19 +219,19 @@ func (c *Creator) createWithCleanup() {
 			return
 		}
 
-		repopath, err := filepath.Abs(c.GitDir())
-		if err != nil {
-			c.SetError("Absolute filepath", err)
-			return
-		}
-		err = c.RestoreContext()
+		/*
+			repopath, err := filepath.Abs(c.GitDir())
+			if err != nil {
+				c.SetError("Absolute filepath", err)
+				return
+			}
+		*/
+		err := c.RestoreContext()
 		if err != nil {
 			c.SetError("pre_update_protos", err)
 			return
 		}
-		if c.SetError("update_protos_in_repo", UpdateProtosInRepo(c.ctx, repopath)) {
-			return
-		}
+
 		c.needscommit = true
 		c.tgr.ProtoCommitted = true
 	}
@@ -603,9 +603,3 @@ func (c *Creator) notifyCreated() {
 	}
 
 }
-
-
-
-
-
-

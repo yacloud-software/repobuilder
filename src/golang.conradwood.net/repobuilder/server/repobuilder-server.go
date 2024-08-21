@@ -28,6 +28,7 @@ const (
 )
 
 var (
+	use_protomanager           = flag.Bool("use_protomanager", true, "if true, use protomanager")
 	port                       = flag.Int("port", 4100, "The grpc server port")
 	WebRepoRequest_store       *db.DBCreateWebRepoRequest
 	TrackerLog_store           *db.DBTrackerLog
@@ -387,9 +388,3 @@ func LanguageToRepo(language common.ProgrammingLanguage) uint64 {
 	}
 	return 0
 }
-
-
-
-
-
-

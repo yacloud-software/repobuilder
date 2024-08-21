@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"golang.conradwood.net/go-easyops/linux"
 	"golang.conradwood.net/go-easyops/utils"
@@ -10,14 +9,6 @@ import (
 	"strings"
 	"time"
 )
-
-var (
-	use_vendor = flag.Bool("use_vendor", false, "if true update vendor directories and install protos and stuff into it")
-)
-
-func (c *Creator) UseVendor() bool {
-	return *use_vendor
-}
 
 // modify the template to match new parameters
 func (c *Creator) ModifyTemplate() error {
@@ -287,9 +278,3 @@ func reverseDomain(domain string) []string {
 	}
 	return res
 }
-
-
-
-
-
-
