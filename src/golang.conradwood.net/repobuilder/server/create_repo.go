@@ -182,7 +182,7 @@ func (c *Creator) create() {
 	c.SetError("save_progress", c.SaveProgress()) // always save progress so far
 	c.SetError("save_status", c.SaveStatus())
 	if c.err != nil {
-		c.Printf("failed task \"%s\": %s\n", c.errtopic, utils.ErrorString(c.err))
+		c.Printf("failed task \"%s\": %s\n", c.errtopic, errors.ErrorStringWithStackTrace(c.err))
 	} else {
 		c.RelinquishRepo()
 		c.Printf("Git repository %s at %s completed successfully.\n", c.req.RepoName, c.GitCloneURL())
@@ -506,7 +506,7 @@ func (c *Creator) SetError(step string, err error) bool {
 	if err == nil {
 		return false
 	}
-	c.Printf("Error in %s creating repository: %s\n", step, err)
+	c.Printf("Error in %s creating repository: %s\n", step, errors.ErrorStringWithStackTrace(err))
 	c.err = err
 	c.errtopic = step
 	return true
