@@ -2,13 +2,14 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
 	pr "golang.conradwood.net/apis/protorenderer"
 	"golang.conradwood.net/go-easyops/linux"
 	"golang.conradwood.net/go-easyops/utils"
 	"golang.yacloud.eu/apis/protomanager"
-	"os"
-	"path/filepath"
-	"strings"
 	//	"time"
 )
 
@@ -36,6 +37,8 @@ func (c *Creator) SubmitProto() error {
 	// compile .proto:
 	var files []file_result
 	if *use_protomanager {
+		fn = strings.TrimPrefix(fn, "/")
+		fn = strings.TrimPrefix(fn, "protos/")
 		cr := &protomanager.SimpleCompileRequest{
 			Filename: fn,
 			Content:  b,
