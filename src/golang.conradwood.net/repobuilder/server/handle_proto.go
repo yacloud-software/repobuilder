@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	pr "golang.conradwood.net/apis/protorenderer"
+	"golang.conradwood.net/go-easyops/errors"
 	"golang.conradwood.net/go-easyops/linux"
 	"golang.conradwood.net/go-easyops/utils"
 	"golang.yacloud.eu/apis/protomanager"
@@ -50,9 +51,10 @@ func (c *Creator) SubmitProto() error {
 		}
 		if v.ErrorMessage != "" {
 			fmt.Printf("(2a) Compile Error: %s\n", v.ErrorMessage)
-			return fmt.Errorf("%s", v.ErrorMessage)
+			return errors.Errorf("%s", v.ErrorMessage)
 		}
 		for _, f := range v.GetFiles() {
+			fmt.Printf("Received file \"%s\"\n", f.Filename)
 			files = append(files, f)
 		}
 
@@ -72,7 +74,7 @@ func (c *Creator) SubmitProto() error {
 		}
 		if v.CompileError != "" {
 			fmt.Printf("(2) Compile Error: %s\n", v.CompileError)
-			return fmt.Errorf("%s", v.CompileError)
+			return errors.Errorf("%s", v.CompileError)
 		}
 		c.tgr.PackageName = "foo_compiled_handle_proto.package"
 		for _, f := range v.GetFiles() {

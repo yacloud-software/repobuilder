@@ -2,12 +2,13 @@ package main
 
 import (
 	"fmt"
-	"golang.conradwood.net/go-easyops/linux"
-	"golang.conradwood.net/go-easyops/utils"
 	"io/ioutil"
 	"os"
 	"strings"
 	"time"
+
+	"golang.conradwood.net/go-easyops/linux"
+	"golang.conradwood.net/go-easyops/utils"
 )
 
 // modify the template to match new parameters

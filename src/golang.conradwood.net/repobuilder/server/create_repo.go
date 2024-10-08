@@ -4,6 +4,8 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"os"
+
 	"golang.conradwood.net/apis/artefact"
 	"golang.conradwood.net/apis/buildrepo"
 	"golang.conradwood.net/apis/common"
@@ -12,10 +14,11 @@ import (
 	pb "golang.conradwood.net/apis/repobuilder"
 	"golang.conradwood.net/go-easyops/auth"
 	"golang.conradwood.net/go-easyops/authremote"
+	"golang.conradwood.net/go-easyops/errors"
 	"golang.conradwood.net/go-easyops/linux"
 	"golang.conradwood.net/go-easyops/tokens"
 	"golang.conradwood.net/go-easyops/utils"
-	"os"
+
 	//	"path/filepath"
 	"strings"
 	"sync"
@@ -80,12 +83,12 @@ func create_web_repo(req *pb.TrackerGitRepository) error {
 	}
 	err := createGitConfig()
 	if err != nil {
-		return fmt.Errorf("failed to create git config %w", err)
+		return errors.Errorf("failed to create git config %w", err)
 	}
 	c := &Creator{tgr: req}
 	err = c.setup()
 	if err != nil {
-		return fmt.Errorf("failed to setup %w", err)
+		return errors.Errorf("failed to setup %w", err)
 	}
 	c.create()
 	return nil
@@ -312,7 +315,7 @@ func (c *Creator) CloneRepo() error {
 		err = c.GitCloneSkel()
 	}
 	if err != nil {
-		return fmt.Errorf("Failed to clone repo: %s", err)
+		return errors.Errorf("Failed to clone repo: %s", err)
 	}
 	c.clonedRepo = true
 	return nil
@@ -422,7 +425,7 @@ func (c *Creator) LoadStatus() error {
 func (c *Creator) RestoreContext() error {
 	ctx, err := authremote.ContextForUserID(c.tgr.UserID)
 	if err != nil {
-		return fmt.Errorf("Unable to get context for user: %w", err)
+		return errors.Errorf("Unable to get context for user: %w", err)
 	}
 	c.ctx = ctx
 	return nil
@@ -548,7 +551,7 @@ func (c *Creator) Printf(format string, args ...interface{}) {
 func createGitConfig() error {
 	h, err := utils.HomeDir()
 	if err != nil {
-		return fmt.Errorf("failed to get homedir %w", err)
+		return errors.Errorf("failed to get homedir %w", err)
 	}
 	gitconfig := `[user]
         name = RepoBuilder
@@ -571,7 +574,7 @@ func (c *Creator) getGitRepo(repoid uint64) (*gitpb.SourceRepositoryURL, error) 
 		return nil, err
 	}
 	if len(repo.URLs) == 0 {
-		return nil, fmt.Errorf("Repo %d has no URLs", repoid)
+		return nil, errors.Errorf("Repo %d has no URLs", repoid)
 	}
 	return repo.URLs[0], nil
 }
