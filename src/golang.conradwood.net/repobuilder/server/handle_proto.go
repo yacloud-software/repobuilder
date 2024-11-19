@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	pr "golang.conradwood.net/apis/protorenderer"
 	"golang.conradwood.net/go-easyops/errors"
 	"golang.conradwood.net/go-easyops/linux"
 	"golang.conradwood.net/go-easyops/utils"
@@ -37,50 +36,27 @@ func (c *Creator) SubmitProto() error {
 	}
 	// compile .proto:
 	var files []file_result
-	if *use_protomanager {
-		fn = strings.TrimPrefix(fn, "/")
-		fn = strings.TrimPrefix(fn, "protos/")
-		cr := &protomanager.SimpleCompileRequest{
-			Filename: fn,
-			Content:  b,
-		}
-		v, err := protomanager.GetProtoManagerClient().SimpleCompileGo(c.ctx, cr)
-		if err != nil {
-			fmt.Printf("(1a) Compile Error: %s\n", err)
-			return err
-		}
-		if v.ErrorMessage != "" {
-			fmt.Printf("(2a) Compile Error: %s\n", v.ErrorMessage)
-			return errors.Errorf("%s", v.ErrorMessage)
-		}
-		for _, f := range v.GetFiles() {
-			fmt.Printf("Received file \"%s\"\n", f.Filename)
-			files = append(files, f)
-		}
 
-	} else {
-		protoclient := pr.GetProtoRendererClient()
-
-		pf := &pr.AddProtoRequest{
-			Name:    fn,
-			Content: string(b),
-		}
-		v, err := protoclient.CompileFile(c.ctx, &pr.CompileRequest{
-			Compilers:       []pr.CompilerType{pr.CompilerType_GOLANG},
-			AddProtoRequest: pf})
-		if err != nil {
-			fmt.Printf("(1) Compile Error: %s\n", err)
-			return err
-		}
-		if v.CompileError != "" {
-			fmt.Printf("(2) Compile Error: %s\n", v.CompileError)
-			return errors.Errorf("%s", v.CompileError)
-		}
-		c.tgr.PackageName = "foo_compiled_handle_proto.package"
-		for _, f := range v.GetFiles() {
-			files = append(files, f)
-		}
+	fn = strings.TrimPrefix(fn, "/")
+	fn = strings.TrimPrefix(fn, "protos/")
+	cr := &protomanager.SimpleCompileRequest{
+		Filename: fn,
+		Content:  b,
 	}
+	v, err := protomanager.GetProtoManagerClient().SimpleCompileGo(c.ctx, cr)
+	if err != nil {
+		fmt.Printf("(1a) Compile Error: %s\n", err)
+		return err
+	}
+	if v.ErrorMessage != "" {
+		fmt.Printf("(2a) Compile Error: %s\n", v.ErrorMessage)
+		return errors.Errorf("%s", v.ErrorMessage)
+	}
+	for _, f := range v.GetFiles() {
+		fmt.Printf("Received file \"%s\"\n", f.Filename)
+		files = append(files, f)
+	}
+
 	c.tgr.ProtoSubmitted = true
 
 	fmt.Printf("Directory: %s\n", c.gitdir)
@@ -88,6 +64,9 @@ func (c *Creator) SubmitProto() error {
 		fname := f.GetFilename()
 		fmt.Printf("Saving file \"%s\"\n", fname)
 		fname = c.fixCompiledProtoFilename(fname)
+		if fname == "" {
+			continue
+		}
 		fmt.Printf("Saving proto file to \"%s\"\n", fname)
 		err = utils.WriteFile(fname, f.GetContent())
 		if err != nil {
@@ -107,6 +86,10 @@ func (c *Creator) SubmitProto() error {
 
 func (c *Creator) fixCompiledProtoFilename(fname string) string {
 	fname = strings.TrimPrefix(fname, "/")
+	if !strings.HasPrefix(fname, "golang") {
+		return ""
+	}
+	fname = strings.TrimPrefix(fname, "golang/")
 	fname = strings.TrimPrefix(fname, "protos")
 	fname = c.GitDir() + "/src/" + fname
 	dir := filepath.Dir(fname)
