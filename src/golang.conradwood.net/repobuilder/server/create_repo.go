@@ -607,6 +607,10 @@ func (c *Creator) notifyCreated() {
 func rungit(com []string, dir string, r io.Reader) (string, error) {
 	l := linux.New()
 	l.SetMaxRuntime(*git_max_run_time)
+	l.SetEnvironment([]string{
+		"HOME=" + git_home_dir,
+		"PATH=" + os.Getenv("PATH"),
+	})
 	out, err := l.SafelyExecuteWithDir([]string{"git", "commit", "-a", "-m", "new repository created"}, dir, r)
 	return out, err
 }
