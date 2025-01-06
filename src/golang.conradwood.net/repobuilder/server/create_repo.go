@@ -195,7 +195,9 @@ func (c *Creator) create() {
 
 func (c *Creator) createWithCleanup() {
 
-	if !c.tgr.PatchRepo {
+	if c.tgr.PatchRepo {
+		c.Printf("Skipping PatchRepo\n")
+	} else {
 		if c.SetError("clonerepo_nopatch", c.CloneRepo()) {
 			return
 		}
@@ -209,18 +211,24 @@ func (c *Creator) createWithCleanup() {
 		c.needscommit = true
 		return
 	}
-	if !c.tgr.SourceInstalled {
+	if c.tgr.SourceInstalled {
+		c.Printf("Skipping SourceInstalled\n")
+	} else {
 		if c.SetError("modify_template", c.ModifyTemplate()) {
 			return
 		}
 	}
 
-	if !c.tgr.ProtoSubmitted {
+	if c.tgr.ProtoSubmitted {
+		c.Printf("Skipping ProtoSubmitted\n")
+	} else {
 		if c.SetError("submit_proto", c.SubmitProto()) {
 			return
 		}
 	}
-	if !c.tgr.ProtoCommitted {
+	if c.tgr.ProtoCommitted {
+		c.Printf("Skipping ProtoCommitted\n")
+	} else {
 		if c.SetError("clone_repo", c.CloneRepo()) {
 			return
 		}
@@ -244,13 +252,17 @@ func (c *Creator) createWithCleanup() {
 	if c.SetError("create_service_account", c.CreateServiceAccount()) {
 		return
 	}
-	if !c.tgr.SecureArgsCreated {
+	if c.tgr.SecureArgsCreated {
+		c.Printf("Skipping SecureArgsCreated\n")
+	} else {
 		if c.SetError("create_args", c.CreateSecureArgs()) {
 			return
 		}
 		c.tgr.SecureArgsCreated = true
 	}
-	if !c.tgr.PermissionsCreated {
+	if c.tgr.PermissionsCreated {
+		c.Printf("Skipping PermissionsCreated\n")
+	} else {
 		if c.SetError("create_permissions", c.CreatePermissions()) {
 			return
 		}
