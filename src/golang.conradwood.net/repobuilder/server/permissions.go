@@ -6,6 +6,7 @@ import (
 	oa "golang.conradwood.net/apis/objectauth"
 	pb "golang.conradwood.net/apis/repobuilder"
 	"golang.conradwood.net/go-easyops/auth"
+	"golang.conradwood.net/go-easyops/errors"
 )
 
 func (c *Creator) CreatePermissions() error {
@@ -15,7 +16,7 @@ func (c *Creator) CreatePermissions() error {
 	}
 	u := auth.GetUser(c.ctx)
 	if u == nil {
-		return fmt.Errorf("Missing user account")
+		return errors.Errorf("Missing user account")
 	}
 	c.Printf("Git RepositoryID: %d\n", c.tgr.RepositoryID)
 	for _, gid := range c.req.VisibilityGroupIDs {
@@ -106,9 +107,3 @@ func SetAdditionalPermissions(ctx context.Context, req *pb.CreateWebRepoRequest,
 	}
 	return nil
 }
-
-
-
-
-
-

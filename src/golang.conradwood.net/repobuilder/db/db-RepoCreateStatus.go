@@ -2,7 +2,7 @@ package db
 
 /*
  This file was created by mkdb-client.
- The intention is not to modify thils file, but you may extend the struct DBRepoCreateStatus
+ The intention is not to modify this file, but you may extend the struct DBRepoCreateStatus
  in a seperate file (so that you can regenerate this one from time to time)
 */
 
@@ -35,8 +35,10 @@ import (
 	gosql "database/sql"
 	"fmt"
 	savepb "golang.conradwood.net/apis/repobuilder"
+	"golang.conradwood.net/go-easyops/errors"
 	"golang.conradwood.net/go-easyops/sql"
 	"os"
+	"sync"
 )
 
 var (
@@ -44,9 +46,11 @@ var (
 )
 
 type DBRepoCreateStatus struct {
-	DB                  *sql.DB
-	SQLTablename        string
-	SQLArchivetablename string
+	DB                   *sql.DB
+	SQLTablename         string
+	SQLArchivetablename  string
+	customColumnHandlers []CustomColumnHandler
+	lock                 sync.Mutex
 }
 
 func DefaultDBRepoCreateStatus() *DBRepoCreateStatus {
@@ -75,6 +79,15 @@ func NewDBRepoCreateStatus(db *sql.DB) *DBRepoCreateStatus {
 	return &foo
 }
 
+func (a *DBRepoCreateStatus) GetCustomColumnHandlers() []CustomColumnHandler {
+	return a.customColumnHandlers
+}
+func (a *DBRepoCreateStatus) AddCustomColumnHandler(w CustomColumnHandler) {
+	a.lock.Lock()
+	a.customColumnHandlers = append(a.customColumnHandlers, w)
+	a.lock.Unlock()
+}
+
 // archive. It is NOT transactionally save.
 func (a *DBRepoCreateStatus) Archive(ctx context.Context, id uint64) error {
 
@@ -95,36 +108,87 @@ func (a *DBRepoCreateStatus) Archive(ctx context.Context, id uint64) error {
 	return nil
 }
 
-// Save (and use database default ID generation)
+// return a map with columnname -> value_from_proto
+func (a *DBRepoCreateStatus) buildSaveMap(ctx context.Context, p *savepb.RepoCreateStatus) (map[string]interface{}, error) {
+	extra, err := extraFieldsToStore(ctx, a, p)
+	if err != nil {
+		return nil, err
+	}
+	res := make(map[string]interface{})
+	res["id"] = a.get_col_from_proto(p, "id")
+	res["createrequestid"] = a.get_col_from_proto(p, "createrequestid")
+	res["createtype"] = a.get_col_from_proto(p, "createtype")
+	res["success"] = a.get_col_from_proto(p, "success")
+	res["error"] = a.get_col_from_proto(p, "error")
+	if extra != nil {
+		for k, v := range extra {
+			res[k] = v
+		}
+	}
+	return res, nil
+}
+
 func (a *DBRepoCreateStatus) Save(ctx context.Context, p *savepb.RepoCreateStatus) (uint64, error) {
-	qn := "DBRepoCreateStatus_Save"
-	rows, e := a.DB.QueryContext(ctx, qn, "insert into "+a.SQLTablename+" (createrequestid, createtype, success, error) values ($1, $2, $3, $4) returning id", p.CreateRequestID, p.CreateType, p.Success, p.Error)
-	if e != nil {
-		return 0, a.Error(ctx, qn, e)
+	qn := "save_DBRepoCreateStatus"
+	smap, err := a.buildSaveMap(ctx, p)
+	if err != nil {
+		return 0, err
 	}
-	defer rows.Close()
-	if !rows.Next() {
-		return 0, a.Error(ctx, qn, fmt.Errorf("No rows after insert"))
-	}
-	var id uint64
-	e = rows.Scan(&id)
-	if e != nil {
-		return 0, a.Error(ctx, qn, fmt.Errorf("failed to scan id after insert: %s", e))
-	}
-	p.ID = id
-	return id, nil
+	delete(smap, "id") // save without id
+	return a.saveMap(ctx, qn, smap, p)
 }
 
 // Save using the ID specified
 func (a *DBRepoCreateStatus) SaveWithID(ctx context.Context, p *savepb.RepoCreateStatus) error {
 	qn := "insert_DBRepoCreateStatus"
-	_, e := a.DB.ExecContext(ctx, qn, "insert into "+a.SQLTablename+" (id,createrequestid, createtype, success, error) values ($1,$2, $3, $4, $5) ", p.ID, p.CreateRequestID, p.CreateType, p.Success, p.Error)
-	return a.Error(ctx, qn, e)
+	smap, err := a.buildSaveMap(ctx, p)
+	if err != nil {
+		return err
+	}
+	_, err = a.saveMap(ctx, qn, smap, p)
+	return err
+}
+
+// use a hashmap of columnname->values to store to database (see buildSaveMap())
+func (a *DBRepoCreateStatus) saveMap(ctx context.Context, queryname string, smap map[string]interface{}, p *savepb.RepoCreateStatus) (uint64, error) {
+	// Save (and use database default ID generation)
+
+	var rows *gosql.Rows
+	var e error
+
+	q_cols := ""
+	q_valnames := ""
+	q_vals := make([]interface{}, 0)
+	deli := ""
+	i := 0
+	// build the 2 parts of the query (column names and value names) as well as the values themselves
+	for colname, val := range smap {
+		q_cols = q_cols + deli + colname
+		i++
+		q_valnames = q_valnames + deli + fmt.Sprintf("$%d", i)
+		q_vals = append(q_vals, val)
+		deli = ","
+	}
+	rows, e = a.DB.QueryContext(ctx, queryname, "insert into "+a.SQLTablename+" ("+q_cols+") values ("+q_valnames+") returning id", q_vals...)
+	if e != nil {
+		return 0, a.Error(ctx, queryname, e)
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		return 0, a.Error(ctx, queryname, errors.Errorf("No rows after insert"))
+	}
+	var id uint64
+	e = rows.Scan(&id)
+	if e != nil {
+		return 0, a.Error(ctx, queryname, errors.Errorf("failed to scan id after insert: %s", e))
+	}
+	p.ID = id
+	return id, nil
 }
 
 func (a *DBRepoCreateStatus) Update(ctx context.Context, p *savepb.RepoCreateStatus) error {
 	qn := "DBRepoCreateStatus_Update"
-	_, e := a.DB.ExecContext(ctx, qn, "update "+a.SQLTablename+" set createrequestid=$1, createtype=$2, success=$3, error=$4 where id = $5", p.CreateRequestID, p.CreateType, p.Success, p.Error, p.ID)
+	_, e := a.DB.ExecContext(ctx, qn, "update "+a.SQLTablename+" set createrequestid=$1, createtype=$2, success=$3, error=$4 where id = $5", a.get_CreateRequestID(p), a.get_CreateType(p), a.get_Success(p), a.get_Error(p), p.ID)
 
 	return a.Error(ctx, qn, e)
 }
@@ -139,20 +203,15 @@ func (a *DBRepoCreateStatus) DeleteByID(ctx context.Context, p uint64) error {
 // get it by primary id
 func (a *DBRepoCreateStatus) ByID(ctx context.Context, p uint64) (*savepb.RepoCreateStatus, error) {
 	qn := "DBRepoCreateStatus_ByID"
-	rows, e := a.DB.QueryContext(ctx, qn, "select id,createrequestid, createtype, success, error from "+a.SQLTablename+" where id = $1", p)
+	l, e := a.fromQuery(ctx, qn, "id = $1", p)
 	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("ByID: error querying (%s)", e))
-	}
-	defer rows.Close()
-	l, e := a.FromRows(ctx, rows)
-	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("ByID: error scanning (%s)", e))
+		return nil, a.Error(ctx, qn, errors.Errorf("ByID: error scanning (%s)", e))
 	}
 	if len(l) == 0 {
-		return nil, a.Error(ctx, qn, fmt.Errorf("No RepoCreateStatus with id %v", p))
+		return nil, a.Error(ctx, qn, errors.Errorf("No RepoCreateStatus with id %v", p))
 	}
 	if len(l) != 1 {
-		return nil, a.Error(ctx, qn, fmt.Errorf("Multiple (%d) RepoCreateStatus with id %v", len(l), p))
+		return nil, a.Error(ctx, qn, errors.Errorf("Multiple (%d) RepoCreateStatus with id %v", len(l), p))
 	}
 	return l[0], nil
 }
@@ -160,35 +219,35 @@ func (a *DBRepoCreateStatus) ByID(ctx context.Context, p uint64) (*savepb.RepoCr
 // get it by primary id (nil if no such ID row, but no error either)
 func (a *DBRepoCreateStatus) TryByID(ctx context.Context, p uint64) (*savepb.RepoCreateStatus, error) {
 	qn := "DBRepoCreateStatus_TryByID"
-	rows, e := a.DB.QueryContext(ctx, qn, "select id,createrequestid, createtype, success, error from "+a.SQLTablename+" where id = $1", p)
+	l, e := a.fromQuery(ctx, qn, "id = $1", p)
 	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("TryByID: error querying (%s)", e))
-	}
-	defer rows.Close()
-	l, e := a.FromRows(ctx, rows)
-	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("TryByID: error scanning (%s)", e))
+		return nil, a.Error(ctx, qn, errors.Errorf("TryByID: error scanning (%s)", e))
 	}
 	if len(l) == 0 {
 		return nil, nil
 	}
 	if len(l) != 1 {
-		return nil, a.Error(ctx, qn, fmt.Errorf("Multiple (%d) RepoCreateStatus with id %v", len(l), p))
+		return nil, a.Error(ctx, qn, errors.Errorf("Multiple (%d) RepoCreateStatus with id %v", len(l), p))
 	}
 	return l[0], nil
+}
+
+// get it by multiple primary ids
+func (a *DBRepoCreateStatus) ByIDs(ctx context.Context, p []uint64) ([]*savepb.RepoCreateStatus, error) {
+	qn := "DBRepoCreateStatus_ByIDs"
+	l, e := a.fromQuery(ctx, qn, "id in $1", p)
+	if e != nil {
+		return nil, a.Error(ctx, qn, errors.Errorf("TryByID: error scanning (%s)", e))
+	}
+	return l, nil
 }
 
 // get all rows
 func (a *DBRepoCreateStatus) All(ctx context.Context) ([]*savepb.RepoCreateStatus, error) {
 	qn := "DBRepoCreateStatus_all"
-	rows, e := a.DB.QueryContext(ctx, qn, "select id,createrequestid, createtype, success, error from "+a.SQLTablename+" order by id")
+	l, e := a.fromQuery(ctx, qn, "true")
 	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("All: error querying (%s)", e))
-	}
-	defer rows.Close()
-	l, e := a.FromRows(ctx, rows)
-	if e != nil {
-		return nil, fmt.Errorf("All: error scanning (%s)", e)
+		return nil, errors.Errorf("All: error scanning (%s)", e)
 	}
 	return l, nil
 }
@@ -200,14 +259,19 @@ func (a *DBRepoCreateStatus) All(ctx context.Context) ([]*savepb.RepoCreateStatu
 // get all "DBRepoCreateStatus" rows with matching CreateRequestID
 func (a *DBRepoCreateStatus) ByCreateRequestID(ctx context.Context, p uint64) ([]*savepb.RepoCreateStatus, error) {
 	qn := "DBRepoCreateStatus_ByCreateRequestID"
-	rows, e := a.DB.QueryContext(ctx, qn, "select id,createrequestid, createtype, success, error from "+a.SQLTablename+" where createrequestid = $1", p)
+	l, e := a.fromQuery(ctx, qn, "createrequestid = $1", p)
 	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("ByCreateRequestID: error querying (%s)", e))
+		return nil, a.Error(ctx, qn, errors.Errorf("ByCreateRequestID: error scanning (%s)", e))
 	}
-	defer rows.Close()
-	l, e := a.FromRows(ctx, rows)
+	return l, nil
+}
+
+// get all "DBRepoCreateStatus" rows with multiple matching CreateRequestID
+func (a *DBRepoCreateStatus) ByMultiCreateRequestID(ctx context.Context, p []uint64) ([]*savepb.RepoCreateStatus, error) {
+	qn := "DBRepoCreateStatus_ByCreateRequestID"
+	l, e := a.fromQuery(ctx, qn, "createrequestid in $1", p)
 	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("ByCreateRequestID: error scanning (%s)", e))
+		return nil, a.Error(ctx, qn, errors.Errorf("ByCreateRequestID: error scanning (%s)", e))
 	}
 	return l, nil
 }
@@ -215,14 +279,9 @@ func (a *DBRepoCreateStatus) ByCreateRequestID(ctx context.Context, p uint64) ([
 // the 'like' lookup
 func (a *DBRepoCreateStatus) ByLikeCreateRequestID(ctx context.Context, p uint64) ([]*savepb.RepoCreateStatus, error) {
 	qn := "DBRepoCreateStatus_ByLikeCreateRequestID"
-	rows, e := a.DB.QueryContext(ctx, qn, "select id,createrequestid, createtype, success, error from "+a.SQLTablename+" where createrequestid ilike $1", p)
+	l, e := a.fromQuery(ctx, qn, "createrequestid ilike $1", p)
 	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("ByCreateRequestID: error querying (%s)", e))
-	}
-	defer rows.Close()
-	l, e := a.FromRows(ctx, rows)
-	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("ByCreateRequestID: error scanning (%s)", e))
+		return nil, a.Error(ctx, qn, errors.Errorf("ByCreateRequestID: error scanning (%s)", e))
 	}
 	return l, nil
 }
@@ -230,14 +289,19 @@ func (a *DBRepoCreateStatus) ByLikeCreateRequestID(ctx context.Context, p uint64
 // get all "DBRepoCreateStatus" rows with matching CreateType
 func (a *DBRepoCreateStatus) ByCreateType(ctx context.Context, p uint32) ([]*savepb.RepoCreateStatus, error) {
 	qn := "DBRepoCreateStatus_ByCreateType"
-	rows, e := a.DB.QueryContext(ctx, qn, "select id,createrequestid, createtype, success, error from "+a.SQLTablename+" where createtype = $1", p)
+	l, e := a.fromQuery(ctx, qn, "createtype = $1", p)
 	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("ByCreateType: error querying (%s)", e))
+		return nil, a.Error(ctx, qn, errors.Errorf("ByCreateType: error scanning (%s)", e))
 	}
-	defer rows.Close()
-	l, e := a.FromRows(ctx, rows)
+	return l, nil
+}
+
+// get all "DBRepoCreateStatus" rows with multiple matching CreateType
+func (a *DBRepoCreateStatus) ByMultiCreateType(ctx context.Context, p []uint32) ([]*savepb.RepoCreateStatus, error) {
+	qn := "DBRepoCreateStatus_ByCreateType"
+	l, e := a.fromQuery(ctx, qn, "createtype in $1", p)
 	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("ByCreateType: error scanning (%s)", e))
+		return nil, a.Error(ctx, qn, errors.Errorf("ByCreateType: error scanning (%s)", e))
 	}
 	return l, nil
 }
@@ -245,14 +309,9 @@ func (a *DBRepoCreateStatus) ByCreateType(ctx context.Context, p uint32) ([]*sav
 // the 'like' lookup
 func (a *DBRepoCreateStatus) ByLikeCreateType(ctx context.Context, p uint32) ([]*savepb.RepoCreateStatus, error) {
 	qn := "DBRepoCreateStatus_ByLikeCreateType"
-	rows, e := a.DB.QueryContext(ctx, qn, "select id,createrequestid, createtype, success, error from "+a.SQLTablename+" where createtype ilike $1", p)
+	l, e := a.fromQuery(ctx, qn, "createtype ilike $1", p)
 	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("ByCreateType: error querying (%s)", e))
-	}
-	defer rows.Close()
-	l, e := a.FromRows(ctx, rows)
-	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("ByCreateType: error scanning (%s)", e))
+		return nil, a.Error(ctx, qn, errors.Errorf("ByCreateType: error scanning (%s)", e))
 	}
 	return l, nil
 }
@@ -260,14 +319,19 @@ func (a *DBRepoCreateStatus) ByLikeCreateType(ctx context.Context, p uint32) ([]
 // get all "DBRepoCreateStatus" rows with matching Success
 func (a *DBRepoCreateStatus) BySuccess(ctx context.Context, p bool) ([]*savepb.RepoCreateStatus, error) {
 	qn := "DBRepoCreateStatus_BySuccess"
-	rows, e := a.DB.QueryContext(ctx, qn, "select id,createrequestid, createtype, success, error from "+a.SQLTablename+" where success = $1", p)
+	l, e := a.fromQuery(ctx, qn, "success = $1", p)
 	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("BySuccess: error querying (%s)", e))
+		return nil, a.Error(ctx, qn, errors.Errorf("BySuccess: error scanning (%s)", e))
 	}
-	defer rows.Close()
-	l, e := a.FromRows(ctx, rows)
+	return l, nil
+}
+
+// get all "DBRepoCreateStatus" rows with multiple matching Success
+func (a *DBRepoCreateStatus) ByMultiSuccess(ctx context.Context, p []bool) ([]*savepb.RepoCreateStatus, error) {
+	qn := "DBRepoCreateStatus_BySuccess"
+	l, e := a.fromQuery(ctx, qn, "success in $1", p)
 	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("BySuccess: error scanning (%s)", e))
+		return nil, a.Error(ctx, qn, errors.Errorf("BySuccess: error scanning (%s)", e))
 	}
 	return l, nil
 }
@@ -275,14 +339,9 @@ func (a *DBRepoCreateStatus) BySuccess(ctx context.Context, p bool) ([]*savepb.R
 // the 'like' lookup
 func (a *DBRepoCreateStatus) ByLikeSuccess(ctx context.Context, p bool) ([]*savepb.RepoCreateStatus, error) {
 	qn := "DBRepoCreateStatus_ByLikeSuccess"
-	rows, e := a.DB.QueryContext(ctx, qn, "select id,createrequestid, createtype, success, error from "+a.SQLTablename+" where success ilike $1", p)
+	l, e := a.fromQuery(ctx, qn, "success ilike $1", p)
 	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("BySuccess: error querying (%s)", e))
-	}
-	defer rows.Close()
-	l, e := a.FromRows(ctx, rows)
-	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("BySuccess: error scanning (%s)", e))
+		return nil, a.Error(ctx, qn, errors.Errorf("BySuccess: error scanning (%s)", e))
 	}
 	return l, nil
 }
@@ -290,14 +349,19 @@ func (a *DBRepoCreateStatus) ByLikeSuccess(ctx context.Context, p bool) ([]*save
 // get all "DBRepoCreateStatus" rows with matching Error
 func (a *DBRepoCreateStatus) ByError(ctx context.Context, p string) ([]*savepb.RepoCreateStatus, error) {
 	qn := "DBRepoCreateStatus_ByError"
-	rows, e := a.DB.QueryContext(ctx, qn, "select id,createrequestid, createtype, success, error from "+a.SQLTablename+" where error = $1", p)
+	l, e := a.fromQuery(ctx, qn, "error = $1", p)
 	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("ByError: error querying (%s)", e))
+		return nil, a.Error(ctx, qn, errors.Errorf("ByError: error scanning (%s)", e))
 	}
-	defer rows.Close()
-	l, e := a.FromRows(ctx, rows)
+	return l, nil
+}
+
+// get all "DBRepoCreateStatus" rows with multiple matching Error
+func (a *DBRepoCreateStatus) ByMultiError(ctx context.Context, p []string) ([]*savepb.RepoCreateStatus, error) {
+	qn := "DBRepoCreateStatus_ByError"
+	l, e := a.fromQuery(ctx, qn, "error in $1", p)
 	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("ByError: error scanning (%s)", e))
+		return nil, a.Error(ctx, qn, errors.Errorf("ByError: error scanning (%s)", e))
 	}
 	return l, nil
 }
@@ -305,16 +369,40 @@ func (a *DBRepoCreateStatus) ByError(ctx context.Context, p string) ([]*savepb.R
 // the 'like' lookup
 func (a *DBRepoCreateStatus) ByLikeError(ctx context.Context, p string) ([]*savepb.RepoCreateStatus, error) {
 	qn := "DBRepoCreateStatus_ByLikeError"
-	rows, e := a.DB.QueryContext(ctx, qn, "select id,createrequestid, createtype, success, error from "+a.SQLTablename+" where error ilike $1", p)
+	l, e := a.fromQuery(ctx, qn, "error ilike $1", p)
 	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("ByError: error querying (%s)", e))
-	}
-	defer rows.Close()
-	l, e := a.FromRows(ctx, rows)
-	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("ByError: error scanning (%s)", e))
+		return nil, a.Error(ctx, qn, errors.Errorf("ByError: error scanning (%s)", e))
 	}
 	return l, nil
+}
+
+/**********************************************************************
+* The field getters
+**********************************************************************/
+
+// getter for field "ID" (ID) [uint64]
+func (a *DBRepoCreateStatus) get_ID(p *savepb.RepoCreateStatus) uint64 {
+	return uint64(p.ID)
+}
+
+// getter for field "CreateRequestID" (CreateRequestID) [uint64]
+func (a *DBRepoCreateStatus) get_CreateRequestID(p *savepb.RepoCreateStatus) uint64 {
+	return uint64(p.CreateRequestID)
+}
+
+// getter for field "CreateType" (CreateType) [uint32]
+func (a *DBRepoCreateStatus) get_CreateType(p *savepb.RepoCreateStatus) uint32 {
+	return uint32(p.CreateType)
+}
+
+// getter for field "Success" (Success) [bool]
+func (a *DBRepoCreateStatus) get_Success(p *savepb.RepoCreateStatus) bool {
+	return bool(p.Success)
+}
+
+// getter for field "Error" (Error) [string]
+func (a *DBRepoCreateStatus) get_Error(p *savepb.RepoCreateStatus) string {
+	return string(p.Error)
 }
 
 /**********************************************************************
@@ -322,17 +410,87 @@ func (a *DBRepoCreateStatus) ByLikeError(ctx context.Context, p string) ([]*save
 **********************************************************************/
 
 // from a query snippet (the part after WHERE)
-func (a *DBRepoCreateStatus) FromQuery(ctx context.Context, query_where string, args ...interface{}) ([]*savepb.RepoCreateStatus, error) {
-	rows, err := a.DB.QueryContext(ctx, "custom_query_"+a.Tablename(), "select "+a.SelectCols()+" from "+a.Tablename()+" where "+query_where, args...)
+func (a *DBRepoCreateStatus) ByDBQuery(ctx context.Context, query *Query) ([]*savepb.RepoCreateStatus, error) {
+	extra_fields, err := extraFieldsToQuery(ctx, a)
 	if err != nil {
 		return nil, err
 	}
-	return a.FromRows(ctx, rows)
+	i := 0
+	for col_name, value := range extra_fields {
+		i++
+		efname := fmt.Sprintf("EXTRA_FIELD_%d", i)
+		query.Add(col_name+" = "+efname, QP{efname: value})
+	}
+
+	gw, paras := query.ToPostgres()
+	queryname := "custom_dbquery"
+	rows, err := a.DB.QueryContext(ctx, queryname, "select "+a.SelectCols()+" from "+a.Tablename()+" where "+gw, paras...)
+	if err != nil {
+		return nil, err
+	}
+	res, err := a.FromRows(ctx, rows)
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
+
+}
+
+func (a *DBRepoCreateStatus) FromQuery(ctx context.Context, query_where string, args ...interface{}) ([]*savepb.RepoCreateStatus, error) {
+	return a.fromQuery(ctx, "custom_query_"+a.Tablename(), query_where, args...)
+}
+
+// from a query snippet (the part after WHERE)
+func (a *DBRepoCreateStatus) fromQuery(ctx context.Context, queryname string, query_where string, args ...interface{}) ([]*savepb.RepoCreateStatus, error) {
+	extra_fields, err := extraFieldsToQuery(ctx, a)
+	if err != nil {
+		return nil, err
+	}
+	eq := ""
+	if extra_fields != nil && len(extra_fields) > 0 {
+		eq = " AND ("
+		// build the extraquery "eq"
+		i := len(args)
+		deli := ""
+		for col_name, value := range extra_fields {
+			i++
+			eq = eq + deli + col_name + fmt.Sprintf(" = $%d", i)
+			deli = " AND "
+			args = append(args, value)
+		}
+		eq = eq + ")"
+	}
+	rows, err := a.DB.QueryContext(ctx, queryname, "select "+a.SelectCols()+" from "+a.Tablename()+" where ( "+query_where+") "+eq, args...)
+	if err != nil {
+		return nil, err
+	}
+	res, err := a.FromRows(ctx, rows)
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
 }
 
 /**********************************************************************
 * Helper to convert from an SQL Row to struct
 **********************************************************************/
+func (a *DBRepoCreateStatus) get_col_from_proto(p *savepb.RepoCreateStatus, colname string) interface{} {
+	if colname == "id" {
+		return a.get_ID(p)
+	} else if colname == "createrequestid" {
+		return a.get_CreateRequestID(p)
+	} else if colname == "createtype" {
+		return a.get_CreateType(p)
+	} else if colname == "success" {
+		return a.get_Success(p)
+	} else if colname == "error" {
+		return a.get_Error(p)
+	}
+	panic(fmt.Sprintf("in table \"%s\", column \"%s\" cannot be resolved to proto field name", a.Tablename(), colname))
+}
+
 func (a *DBRepoCreateStatus) Tablename() string {
 	return a.SQLTablename
 }
@@ -344,18 +502,6 @@ func (a *DBRepoCreateStatus) SelectColsQualified() string {
 	return "" + a.SQLTablename + ".id," + a.SQLTablename + ".createrequestid, " + a.SQLTablename + ".createtype, " + a.SQLTablename + ".success, " + a.SQLTablename + ".error"
 }
 
-func (a *DBRepoCreateStatus) FromRowsOld(ctx context.Context, rows *gosql.Rows) ([]*savepb.RepoCreateStatus, error) {
-	var res []*savepb.RepoCreateStatus
-	for rows.Next() {
-		foo := savepb.RepoCreateStatus{}
-		err := rows.Scan(&foo.ID, &foo.CreateRequestID, &foo.CreateType, &foo.Success, &foo.Error)
-		if err != nil {
-			return nil, a.Error(ctx, "fromrow-scan", err)
-		}
-		res = append(res, &foo)
-	}
-	return res, nil
-}
 func (a *DBRepoCreateStatus) FromRows(ctx context.Context, rows *gosql.Rows) ([]*savepb.RepoCreateStatus, error) {
 	var res []*savepb.RepoCreateStatus
 	for rows.Next() {
@@ -387,15 +533,15 @@ func (a *DBRepoCreateStatus) CreateTable(ctx context.Context) error {
 		`create sequence if not exists ` + a.SQLTablename + `_seq;`,
 		`CREATE TABLE if not exists ` + a.SQLTablename + ` (id integer primary key default nextval('` + a.SQLTablename + `_seq'),createrequestid bigint not null ,createtype integer not null ,success boolean not null ,error text not null );`,
 		`CREATE TABLE if not exists ` + a.SQLTablename + `_archive (id integer primary key default nextval('` + a.SQLTablename + `_seq'),createrequestid bigint not null ,createtype integer not null ,success boolean not null ,error text not null );`,
-		`ALTER TABLE repocreatestatus ADD COLUMN IF NOT EXISTS createrequestid bigint not null default 0;`,
-		`ALTER TABLE repocreatestatus ADD COLUMN IF NOT EXISTS createtype integer not null default 0;`,
-		`ALTER TABLE repocreatestatus ADD COLUMN IF NOT EXISTS success boolean not null default false;`,
-		`ALTER TABLE repocreatestatus ADD COLUMN IF NOT EXISTS error text not null default '';`,
+		`ALTER TABLE ` + a.SQLTablename + ` ADD COLUMN IF NOT EXISTS createrequestid bigint not null default 0;`,
+		`ALTER TABLE ` + a.SQLTablename + ` ADD COLUMN IF NOT EXISTS createtype integer not null default 0;`,
+		`ALTER TABLE ` + a.SQLTablename + ` ADD COLUMN IF NOT EXISTS success boolean not null default false;`,
+		`ALTER TABLE ` + a.SQLTablename + ` ADD COLUMN IF NOT EXISTS error text not null default '';`,
 
-		`ALTER TABLE repocreatestatus_archive ADD COLUMN IF NOT EXISTS createrequestid bigint not null  default 0;`,
-		`ALTER TABLE repocreatestatus_archive ADD COLUMN IF NOT EXISTS createtype integer not null  default 0;`,
-		`ALTER TABLE repocreatestatus_archive ADD COLUMN IF NOT EXISTS success boolean not null  default false;`,
-		`ALTER TABLE repocreatestatus_archive ADD COLUMN IF NOT EXISTS error text not null  default '';`,
+		`ALTER TABLE ` + a.SQLTablename + `_archive  ADD COLUMN IF NOT EXISTS createrequestid bigint not null  default 0;`,
+		`ALTER TABLE ` + a.SQLTablename + `_archive  ADD COLUMN IF NOT EXISTS createtype integer not null  default 0;`,
+		`ALTER TABLE ` + a.SQLTablename + `_archive  ADD COLUMN IF NOT EXISTS success boolean not null  default false;`,
+		`ALTER TABLE ` + a.SQLTablename + `_archive  ADD COLUMN IF NOT EXISTS error text not null  default '';`,
 	}
 
 	for i, c := range csql {
@@ -425,5 +571,6 @@ func (a *DBRepoCreateStatus) Error(ctx context.Context, q string, e error) error
 	if e == nil {
 		return nil
 	}
-	return fmt.Errorf("[table="+a.SQLTablename+", query=%s] Error: %s", q, e)
+	return errors.Errorf("[table="+a.SQLTablename+", query=%s] Error: %s", q, e)
 }
+

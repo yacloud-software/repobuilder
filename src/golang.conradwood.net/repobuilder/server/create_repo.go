@@ -4,8 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"os"
-
 	"golang.conradwood.net/apis/artefact"
 	"golang.conradwood.net/apis/buildrepo"
 	"golang.conradwood.net/apis/common"
@@ -18,6 +16,8 @@ import (
 	"golang.conradwood.net/go-easyops/linux"
 	"golang.conradwood.net/go-easyops/tokens"
 	"golang.conradwood.net/go-easyops/utils"
+	"io"
+	"os"
 
 	//	"path/filepath"
 	"strings"
@@ -26,6 +26,7 @@ import (
 )
 
 var (
+	git_home_dir     string
 	git_max_run_time = flag.Duration("git_max_runtime", time.Duration(600)*time.Second, "max runtime in seconds of a git process before it is killed")
 	git_dir          = flag.String("git_dir", "/tmp/git_dirs", "the directory in which to clone git")
 	creatorLock      sync.Mutex
@@ -181,7 +182,9 @@ func (c *Creator) create() {
 
 	c.SetError("save_progress", c.SaveProgress()) // always save progress so far
 	c.SetError("save_status", c.SaveStatus())
+	details := fmt.Sprintf("[trackergitrepo id=%d, createwebreporequest id=%d, repocreatestatus id = %d] ", c.tgr.ID, c.req.ID, c.rcs.ID)
 	if c.err != nil {
+		c.Printf("%sGit repository %s at %s failed.\n", details, c.req.RepoName, c.GitCloneURL())
 		c.Printf("failed task \"%s\": %s\n", c.errtopic, errors.ErrorStringWithStackTrace(c.err))
 	} else {
 		c.RelinquishRepo()
@@ -281,18 +284,16 @@ func (c *Creator) GitCommit() error {
 		return err
 	}
 	c.Printf("Committing git repo...\n")
-	l := linux.New()
-	l.SetMaxRuntime(*git_max_run_time)
 	dir := fmt.Sprintf("%s/%d/repo", *git_dir, c.req.ID)
 	os.MkdirAll(dir, 0777)
 	url := c.GitCloneURL()
 	c.GitSetAuth(url)
-	out, err := l.SafelyExecuteWithDir([]string{"git", "commit", "-a", "-m", "new repository created"}, dir, nil)
+	out, err := rungit([]string{"git", "commit", "-a", "-m", "new repository created"}, dir, nil)
 	if err != nil {
 		c.Printf("Error Committing (%s). Git said: %s\n", err, out)
 		return err
 	}
-	out, err = l.SafelyExecuteWithDir([]string{"git", "push", "--set-upstream", "origin", "master"}, dir, nil)
+	out, err = rungit([]string{"git", "push", "--set-upstream", "origin", "master"}, dir, nil)
 	if err != nil {
 		c.Printf("Error Push. Git said: %s\n", out)
 		return err
@@ -438,14 +439,12 @@ func (c *Creator) GitCloneURL() string {
 
 // ensures it's cloned somewhere
 func (c *Creator) GitClone() error {
-	l := linux.New()
-	l.SetMaxRuntime(time.Duration(300) * time.Second)
 	dir := fmt.Sprintf("%s/%d", *git_dir, c.req.ID)
 	os.MkdirAll(dir, 0777)
 	url := c.GitCloneURL()
 	c.Printf("Cloning git repo %s...\n", url)
 	c.GitSetAuth(url)
-	out, err := l.SafelyExecuteWithDir([]string{"git", "clone", url, "repo"}, dir, nil)
+	out, err := rungit([]string{"git", "clone", url, "repo"}, dir, nil)
 	if err != nil {
 		c.Printf("Error. Git said: %s\n", out)
 		return err
@@ -456,8 +455,6 @@ func (c *Creator) GitClone() error {
 
 // check out the "skel" and modify the URL to point back to the proper url
 func (c *Creator) GitCloneSkel() error {
-	l := linux.New()
-	l.SetMaxRuntime(time.Duration(300) * time.Second)
 	dir := fmt.Sprintf("%s/%d", *git_dir, c.req.ID)
 	os.RemoveAll(dir)
 	os.MkdirAll(dir, 0777)
@@ -469,7 +466,7 @@ func (c *Creator) GitCloneSkel() error {
 	url = fmt.Sprintf("https://%s/git/%s", repo.Host, repo.Path)
 	c.Printf("Cloning git repo %s...\n", url)
 	c.GitSetAuth(url)
-	out, err := l.SafelyExecuteWithDir([]string{"git", "clone", url, "repo"}, dir, nil)
+	out, err := rungit([]string{"git", "clone", url, "repo"}, dir, nil)
 	if err != nil {
 		c.Printf("Error. Git said: %s\n", out)
 		return err
@@ -553,6 +550,7 @@ func createGitConfig() error {
 	if err != nil {
 		return errors.Errorf("failed to get homedir %w", err)
 	}
+	git_home_dir = h + "/repobuilder"
 	gitconfig := `[user]
         name = RepoBuilder
         email = repobuilder@services.yacloud.eu
@@ -562,7 +560,7 @@ func createGitConfig() error {
         extraHeader = "Authorization: Bearer %s"
 `
 	gc := fmt.Sprintf(gitconfig, tokens.GetServiceTokenParameter())
-	err = utils.WriteFile(h+"/.gitconfig", []byte(gc))
+	err = utils.WriteFileCreateDir(git_home_dir+"/.gitconfig", []byte(gc))
 	return err
 }
 
@@ -604,5 +602,11 @@ func (c *Creator) notifyCreated() {
 	if err != nil {
 		fmt.Printf("Failed to store trackergitrepo: %s\n", err)
 	}
+}
 
+func rungit(com []string, dir string, r io.Reader) (string, error) {
+	l := linux.New()
+	l.SetMaxRuntime(*git_max_run_time)
+	out, err := l.SafelyExecuteWithDir([]string{"git", "commit", "-a", "-m", "new repository created"}, dir, r)
+	return out, err
 }

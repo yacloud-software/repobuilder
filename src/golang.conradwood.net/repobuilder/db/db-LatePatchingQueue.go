@@ -2,7 +2,7 @@ package db
 
 /*
  This file was created by mkdb-client.
- The intention is not to modify thils file, but you may extend the struct DBLatePatchingQueue
+ The intention is not to modify this file, but you may extend the struct DBLatePatchingQueue
  in a seperate file (so that you can regenerate this one from time to time)
 */
 
@@ -34,8 +34,10 @@ import (
 	gosql "database/sql"
 	"fmt"
 	savepb "golang.conradwood.net/apis/repobuilder"
+	"golang.conradwood.net/go-easyops/errors"
 	"golang.conradwood.net/go-easyops/sql"
 	"os"
+	"sync"
 )
 
 var (
@@ -43,9 +45,11 @@ var (
 )
 
 type DBLatePatchingQueue struct {
-	DB                  *sql.DB
-	SQLTablename        string
-	SQLArchivetablename string
+	DB                   *sql.DB
+	SQLTablename         string
+	SQLArchivetablename  string
+	customColumnHandlers []CustomColumnHandler
+	lock                 sync.Mutex
 }
 
 func DefaultDBLatePatchingQueue() *DBLatePatchingQueue {
@@ -74,6 +78,15 @@ func NewDBLatePatchingQueue(db *sql.DB) *DBLatePatchingQueue {
 	return &foo
 }
 
+func (a *DBLatePatchingQueue) GetCustomColumnHandlers() []CustomColumnHandler {
+	return a.customColumnHandlers
+}
+func (a *DBLatePatchingQueue) AddCustomColumnHandler(w CustomColumnHandler) {
+	a.lock.Lock()
+	a.customColumnHandlers = append(a.customColumnHandlers, w)
+	a.lock.Unlock()
+}
+
 // archive. It is NOT transactionally save.
 func (a *DBLatePatchingQueue) Archive(ctx context.Context, id uint64) error {
 
@@ -94,36 +107,86 @@ func (a *DBLatePatchingQueue) Archive(ctx context.Context, id uint64) error {
 	return nil
 }
 
-// Save (and use database default ID generation)
+// return a map with columnname -> value_from_proto
+func (a *DBLatePatchingQueue) buildSaveMap(ctx context.Context, p *savepb.LatePatchingQueue) (map[string]interface{}, error) {
+	extra, err := extraFieldsToStore(ctx, a, p)
+	if err != nil {
+		return nil, err
+	}
+	res := make(map[string]interface{})
+	res["id"] = a.get_col_from_proto(p, "id")
+	res["repositoryid"] = a.get_col_from_proto(p, "repositoryid")
+	res["entrycreated"] = a.get_col_from_proto(p, "entrycreated")
+	res["lastattempt"] = a.get_col_from_proto(p, "lastattempt")
+	if extra != nil {
+		for k, v := range extra {
+			res[k] = v
+		}
+	}
+	return res, nil
+}
+
 func (a *DBLatePatchingQueue) Save(ctx context.Context, p *savepb.LatePatchingQueue) (uint64, error) {
-	qn := "DBLatePatchingQueue_Save"
-	rows, e := a.DB.QueryContext(ctx, qn, "insert into "+a.SQLTablename+" (repositoryid, entrycreated, lastattempt) values ($1, $2, $3) returning id", p.RepositoryID, p.EntryCreated, p.LastAttempt)
-	if e != nil {
-		return 0, a.Error(ctx, qn, e)
+	qn := "save_DBLatePatchingQueue"
+	smap, err := a.buildSaveMap(ctx, p)
+	if err != nil {
+		return 0, err
 	}
-	defer rows.Close()
-	if !rows.Next() {
-		return 0, a.Error(ctx, qn, fmt.Errorf("No rows after insert"))
-	}
-	var id uint64
-	e = rows.Scan(&id)
-	if e != nil {
-		return 0, a.Error(ctx, qn, fmt.Errorf("failed to scan id after insert: %s", e))
-	}
-	p.ID = id
-	return id, nil
+	delete(smap, "id") // save without id
+	return a.saveMap(ctx, qn, smap, p)
 }
 
 // Save using the ID specified
 func (a *DBLatePatchingQueue) SaveWithID(ctx context.Context, p *savepb.LatePatchingQueue) error {
 	qn := "insert_DBLatePatchingQueue"
-	_, e := a.DB.ExecContext(ctx, qn, "insert into "+a.SQLTablename+" (id,repositoryid, entrycreated, lastattempt) values ($1,$2, $3, $4) ", p.ID, p.RepositoryID, p.EntryCreated, p.LastAttempt)
-	return a.Error(ctx, qn, e)
+	smap, err := a.buildSaveMap(ctx, p)
+	if err != nil {
+		return err
+	}
+	_, err = a.saveMap(ctx, qn, smap, p)
+	return err
+}
+
+// use a hashmap of columnname->values to store to database (see buildSaveMap())
+func (a *DBLatePatchingQueue) saveMap(ctx context.Context, queryname string, smap map[string]interface{}, p *savepb.LatePatchingQueue) (uint64, error) {
+	// Save (and use database default ID generation)
+
+	var rows *gosql.Rows
+	var e error
+
+	q_cols := ""
+	q_valnames := ""
+	q_vals := make([]interface{}, 0)
+	deli := ""
+	i := 0
+	// build the 2 parts of the query (column names and value names) as well as the values themselves
+	for colname, val := range smap {
+		q_cols = q_cols + deli + colname
+		i++
+		q_valnames = q_valnames + deli + fmt.Sprintf("$%d", i)
+		q_vals = append(q_vals, val)
+		deli = ","
+	}
+	rows, e = a.DB.QueryContext(ctx, queryname, "insert into "+a.SQLTablename+" ("+q_cols+") values ("+q_valnames+") returning id", q_vals...)
+	if e != nil {
+		return 0, a.Error(ctx, queryname, e)
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		return 0, a.Error(ctx, queryname, errors.Errorf("No rows after insert"))
+	}
+	var id uint64
+	e = rows.Scan(&id)
+	if e != nil {
+		return 0, a.Error(ctx, queryname, errors.Errorf("failed to scan id after insert: %s", e))
+	}
+	p.ID = id
+	return id, nil
 }
 
 func (a *DBLatePatchingQueue) Update(ctx context.Context, p *savepb.LatePatchingQueue) error {
 	qn := "DBLatePatchingQueue_Update"
-	_, e := a.DB.ExecContext(ctx, qn, "update "+a.SQLTablename+" set repositoryid=$1, entrycreated=$2, lastattempt=$3 where id = $4", p.RepositoryID, p.EntryCreated, p.LastAttempt, p.ID)
+	_, e := a.DB.ExecContext(ctx, qn, "update "+a.SQLTablename+" set repositoryid=$1, entrycreated=$2, lastattempt=$3 where id = $4", a.get_RepositoryID(p), a.get_EntryCreated(p), a.get_LastAttempt(p), p.ID)
 
 	return a.Error(ctx, qn, e)
 }
@@ -138,20 +201,15 @@ func (a *DBLatePatchingQueue) DeleteByID(ctx context.Context, p uint64) error {
 // get it by primary id
 func (a *DBLatePatchingQueue) ByID(ctx context.Context, p uint64) (*savepb.LatePatchingQueue, error) {
 	qn := "DBLatePatchingQueue_ByID"
-	rows, e := a.DB.QueryContext(ctx, qn, "select id,repositoryid, entrycreated, lastattempt from "+a.SQLTablename+" where id = $1", p)
+	l, e := a.fromQuery(ctx, qn, "id = $1", p)
 	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("ByID: error querying (%s)", e))
-	}
-	defer rows.Close()
-	l, e := a.FromRows(ctx, rows)
-	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("ByID: error scanning (%s)", e))
+		return nil, a.Error(ctx, qn, errors.Errorf("ByID: error scanning (%s)", e))
 	}
 	if len(l) == 0 {
-		return nil, a.Error(ctx, qn, fmt.Errorf("No LatePatchingQueue with id %v", p))
+		return nil, a.Error(ctx, qn, errors.Errorf("No LatePatchingQueue with id %v", p))
 	}
 	if len(l) != 1 {
-		return nil, a.Error(ctx, qn, fmt.Errorf("Multiple (%d) LatePatchingQueue with id %v", len(l), p))
+		return nil, a.Error(ctx, qn, errors.Errorf("Multiple (%d) LatePatchingQueue with id %v", len(l), p))
 	}
 	return l[0], nil
 }
@@ -159,35 +217,35 @@ func (a *DBLatePatchingQueue) ByID(ctx context.Context, p uint64) (*savepb.LateP
 // get it by primary id (nil if no such ID row, but no error either)
 func (a *DBLatePatchingQueue) TryByID(ctx context.Context, p uint64) (*savepb.LatePatchingQueue, error) {
 	qn := "DBLatePatchingQueue_TryByID"
-	rows, e := a.DB.QueryContext(ctx, qn, "select id,repositoryid, entrycreated, lastattempt from "+a.SQLTablename+" where id = $1", p)
+	l, e := a.fromQuery(ctx, qn, "id = $1", p)
 	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("TryByID: error querying (%s)", e))
-	}
-	defer rows.Close()
-	l, e := a.FromRows(ctx, rows)
-	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("TryByID: error scanning (%s)", e))
+		return nil, a.Error(ctx, qn, errors.Errorf("TryByID: error scanning (%s)", e))
 	}
 	if len(l) == 0 {
 		return nil, nil
 	}
 	if len(l) != 1 {
-		return nil, a.Error(ctx, qn, fmt.Errorf("Multiple (%d) LatePatchingQueue with id %v", len(l), p))
+		return nil, a.Error(ctx, qn, errors.Errorf("Multiple (%d) LatePatchingQueue with id %v", len(l), p))
 	}
 	return l[0], nil
+}
+
+// get it by multiple primary ids
+func (a *DBLatePatchingQueue) ByIDs(ctx context.Context, p []uint64) ([]*savepb.LatePatchingQueue, error) {
+	qn := "DBLatePatchingQueue_ByIDs"
+	l, e := a.fromQuery(ctx, qn, "id in $1", p)
+	if e != nil {
+		return nil, a.Error(ctx, qn, errors.Errorf("TryByID: error scanning (%s)", e))
+	}
+	return l, nil
 }
 
 // get all rows
 func (a *DBLatePatchingQueue) All(ctx context.Context) ([]*savepb.LatePatchingQueue, error) {
 	qn := "DBLatePatchingQueue_all"
-	rows, e := a.DB.QueryContext(ctx, qn, "select id,repositoryid, entrycreated, lastattempt from "+a.SQLTablename+" order by id")
+	l, e := a.fromQuery(ctx, qn, "true")
 	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("All: error querying (%s)", e))
-	}
-	defer rows.Close()
-	l, e := a.FromRows(ctx, rows)
-	if e != nil {
-		return nil, fmt.Errorf("All: error scanning (%s)", e)
+		return nil, errors.Errorf("All: error scanning (%s)", e)
 	}
 	return l, nil
 }
@@ -199,14 +257,19 @@ func (a *DBLatePatchingQueue) All(ctx context.Context) ([]*savepb.LatePatchingQu
 // get all "DBLatePatchingQueue" rows with matching RepositoryID
 func (a *DBLatePatchingQueue) ByRepositoryID(ctx context.Context, p uint64) ([]*savepb.LatePatchingQueue, error) {
 	qn := "DBLatePatchingQueue_ByRepositoryID"
-	rows, e := a.DB.QueryContext(ctx, qn, "select id,repositoryid, entrycreated, lastattempt from "+a.SQLTablename+" where repositoryid = $1", p)
+	l, e := a.fromQuery(ctx, qn, "repositoryid = $1", p)
 	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("ByRepositoryID: error querying (%s)", e))
+		return nil, a.Error(ctx, qn, errors.Errorf("ByRepositoryID: error scanning (%s)", e))
 	}
-	defer rows.Close()
-	l, e := a.FromRows(ctx, rows)
+	return l, nil
+}
+
+// get all "DBLatePatchingQueue" rows with multiple matching RepositoryID
+func (a *DBLatePatchingQueue) ByMultiRepositoryID(ctx context.Context, p []uint64) ([]*savepb.LatePatchingQueue, error) {
+	qn := "DBLatePatchingQueue_ByRepositoryID"
+	l, e := a.fromQuery(ctx, qn, "repositoryid in $1", p)
 	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("ByRepositoryID: error scanning (%s)", e))
+		return nil, a.Error(ctx, qn, errors.Errorf("ByRepositoryID: error scanning (%s)", e))
 	}
 	return l, nil
 }
@@ -214,14 +277,9 @@ func (a *DBLatePatchingQueue) ByRepositoryID(ctx context.Context, p uint64) ([]*
 // the 'like' lookup
 func (a *DBLatePatchingQueue) ByLikeRepositoryID(ctx context.Context, p uint64) ([]*savepb.LatePatchingQueue, error) {
 	qn := "DBLatePatchingQueue_ByLikeRepositoryID"
-	rows, e := a.DB.QueryContext(ctx, qn, "select id,repositoryid, entrycreated, lastattempt from "+a.SQLTablename+" where repositoryid ilike $1", p)
+	l, e := a.fromQuery(ctx, qn, "repositoryid ilike $1", p)
 	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("ByRepositoryID: error querying (%s)", e))
-	}
-	defer rows.Close()
-	l, e := a.FromRows(ctx, rows)
-	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("ByRepositoryID: error scanning (%s)", e))
+		return nil, a.Error(ctx, qn, errors.Errorf("ByRepositoryID: error scanning (%s)", e))
 	}
 	return l, nil
 }
@@ -229,14 +287,19 @@ func (a *DBLatePatchingQueue) ByLikeRepositoryID(ctx context.Context, p uint64) 
 // get all "DBLatePatchingQueue" rows with matching EntryCreated
 func (a *DBLatePatchingQueue) ByEntryCreated(ctx context.Context, p uint32) ([]*savepb.LatePatchingQueue, error) {
 	qn := "DBLatePatchingQueue_ByEntryCreated"
-	rows, e := a.DB.QueryContext(ctx, qn, "select id,repositoryid, entrycreated, lastattempt from "+a.SQLTablename+" where entrycreated = $1", p)
+	l, e := a.fromQuery(ctx, qn, "entrycreated = $1", p)
 	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("ByEntryCreated: error querying (%s)", e))
+		return nil, a.Error(ctx, qn, errors.Errorf("ByEntryCreated: error scanning (%s)", e))
 	}
-	defer rows.Close()
-	l, e := a.FromRows(ctx, rows)
+	return l, nil
+}
+
+// get all "DBLatePatchingQueue" rows with multiple matching EntryCreated
+func (a *DBLatePatchingQueue) ByMultiEntryCreated(ctx context.Context, p []uint32) ([]*savepb.LatePatchingQueue, error) {
+	qn := "DBLatePatchingQueue_ByEntryCreated"
+	l, e := a.fromQuery(ctx, qn, "entrycreated in $1", p)
 	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("ByEntryCreated: error scanning (%s)", e))
+		return nil, a.Error(ctx, qn, errors.Errorf("ByEntryCreated: error scanning (%s)", e))
 	}
 	return l, nil
 }
@@ -244,14 +307,9 @@ func (a *DBLatePatchingQueue) ByEntryCreated(ctx context.Context, p uint32) ([]*
 // the 'like' lookup
 func (a *DBLatePatchingQueue) ByLikeEntryCreated(ctx context.Context, p uint32) ([]*savepb.LatePatchingQueue, error) {
 	qn := "DBLatePatchingQueue_ByLikeEntryCreated"
-	rows, e := a.DB.QueryContext(ctx, qn, "select id,repositoryid, entrycreated, lastattempt from "+a.SQLTablename+" where entrycreated ilike $1", p)
+	l, e := a.fromQuery(ctx, qn, "entrycreated ilike $1", p)
 	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("ByEntryCreated: error querying (%s)", e))
-	}
-	defer rows.Close()
-	l, e := a.FromRows(ctx, rows)
-	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("ByEntryCreated: error scanning (%s)", e))
+		return nil, a.Error(ctx, qn, errors.Errorf("ByEntryCreated: error scanning (%s)", e))
 	}
 	return l, nil
 }
@@ -259,14 +317,19 @@ func (a *DBLatePatchingQueue) ByLikeEntryCreated(ctx context.Context, p uint32) 
 // get all "DBLatePatchingQueue" rows with matching LastAttempt
 func (a *DBLatePatchingQueue) ByLastAttempt(ctx context.Context, p uint32) ([]*savepb.LatePatchingQueue, error) {
 	qn := "DBLatePatchingQueue_ByLastAttempt"
-	rows, e := a.DB.QueryContext(ctx, qn, "select id,repositoryid, entrycreated, lastattempt from "+a.SQLTablename+" where lastattempt = $1", p)
+	l, e := a.fromQuery(ctx, qn, "lastattempt = $1", p)
 	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("ByLastAttempt: error querying (%s)", e))
+		return nil, a.Error(ctx, qn, errors.Errorf("ByLastAttempt: error scanning (%s)", e))
 	}
-	defer rows.Close()
-	l, e := a.FromRows(ctx, rows)
+	return l, nil
+}
+
+// get all "DBLatePatchingQueue" rows with multiple matching LastAttempt
+func (a *DBLatePatchingQueue) ByMultiLastAttempt(ctx context.Context, p []uint32) ([]*savepb.LatePatchingQueue, error) {
+	qn := "DBLatePatchingQueue_ByLastAttempt"
+	l, e := a.fromQuery(ctx, qn, "lastattempt in $1", p)
 	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("ByLastAttempt: error scanning (%s)", e))
+		return nil, a.Error(ctx, qn, errors.Errorf("ByLastAttempt: error scanning (%s)", e))
 	}
 	return l, nil
 }
@@ -274,16 +337,35 @@ func (a *DBLatePatchingQueue) ByLastAttempt(ctx context.Context, p uint32) ([]*s
 // the 'like' lookup
 func (a *DBLatePatchingQueue) ByLikeLastAttempt(ctx context.Context, p uint32) ([]*savepb.LatePatchingQueue, error) {
 	qn := "DBLatePatchingQueue_ByLikeLastAttempt"
-	rows, e := a.DB.QueryContext(ctx, qn, "select id,repositoryid, entrycreated, lastattempt from "+a.SQLTablename+" where lastattempt ilike $1", p)
+	l, e := a.fromQuery(ctx, qn, "lastattempt ilike $1", p)
 	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("ByLastAttempt: error querying (%s)", e))
-	}
-	defer rows.Close()
-	l, e := a.FromRows(ctx, rows)
-	if e != nil {
-		return nil, a.Error(ctx, qn, fmt.Errorf("ByLastAttempt: error scanning (%s)", e))
+		return nil, a.Error(ctx, qn, errors.Errorf("ByLastAttempt: error scanning (%s)", e))
 	}
 	return l, nil
+}
+
+/**********************************************************************
+* The field getters
+**********************************************************************/
+
+// getter for field "ID" (ID) [uint64]
+func (a *DBLatePatchingQueue) get_ID(p *savepb.LatePatchingQueue) uint64 {
+	return uint64(p.ID)
+}
+
+// getter for field "RepositoryID" (RepositoryID) [uint64]
+func (a *DBLatePatchingQueue) get_RepositoryID(p *savepb.LatePatchingQueue) uint64 {
+	return uint64(p.RepositoryID)
+}
+
+// getter for field "EntryCreated" (EntryCreated) [uint32]
+func (a *DBLatePatchingQueue) get_EntryCreated(p *savepb.LatePatchingQueue) uint32 {
+	return uint32(p.EntryCreated)
+}
+
+// getter for field "LastAttempt" (LastAttempt) [uint32]
+func (a *DBLatePatchingQueue) get_LastAttempt(p *savepb.LatePatchingQueue) uint32 {
+	return uint32(p.LastAttempt)
 }
 
 /**********************************************************************
@@ -291,17 +373,85 @@ func (a *DBLatePatchingQueue) ByLikeLastAttempt(ctx context.Context, p uint32) (
 **********************************************************************/
 
 // from a query snippet (the part after WHERE)
-func (a *DBLatePatchingQueue) FromQuery(ctx context.Context, query_where string, args ...interface{}) ([]*savepb.LatePatchingQueue, error) {
-	rows, err := a.DB.QueryContext(ctx, "custom_query_"+a.Tablename(), "select "+a.SelectCols()+" from "+a.Tablename()+" where "+query_where, args...)
+func (a *DBLatePatchingQueue) ByDBQuery(ctx context.Context, query *Query) ([]*savepb.LatePatchingQueue, error) {
+	extra_fields, err := extraFieldsToQuery(ctx, a)
 	if err != nil {
 		return nil, err
 	}
-	return a.FromRows(ctx, rows)
+	i := 0
+	for col_name, value := range extra_fields {
+		i++
+		efname := fmt.Sprintf("EXTRA_FIELD_%d", i)
+		query.Add(col_name+" = "+efname, QP{efname: value})
+	}
+
+	gw, paras := query.ToPostgres()
+	queryname := "custom_dbquery"
+	rows, err := a.DB.QueryContext(ctx, queryname, "select "+a.SelectCols()+" from "+a.Tablename()+" where "+gw, paras...)
+	if err != nil {
+		return nil, err
+	}
+	res, err := a.FromRows(ctx, rows)
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
+
+}
+
+func (a *DBLatePatchingQueue) FromQuery(ctx context.Context, query_where string, args ...interface{}) ([]*savepb.LatePatchingQueue, error) {
+	return a.fromQuery(ctx, "custom_query_"+a.Tablename(), query_where, args...)
+}
+
+// from a query snippet (the part after WHERE)
+func (a *DBLatePatchingQueue) fromQuery(ctx context.Context, queryname string, query_where string, args ...interface{}) ([]*savepb.LatePatchingQueue, error) {
+	extra_fields, err := extraFieldsToQuery(ctx, a)
+	if err != nil {
+		return nil, err
+	}
+	eq := ""
+	if extra_fields != nil && len(extra_fields) > 0 {
+		eq = " AND ("
+		// build the extraquery "eq"
+		i := len(args)
+		deli := ""
+		for col_name, value := range extra_fields {
+			i++
+			eq = eq + deli + col_name + fmt.Sprintf(" = $%d", i)
+			deli = " AND "
+			args = append(args, value)
+		}
+		eq = eq + ")"
+	}
+	rows, err := a.DB.QueryContext(ctx, queryname, "select "+a.SelectCols()+" from "+a.Tablename()+" where ( "+query_where+") "+eq, args...)
+	if err != nil {
+		return nil, err
+	}
+	res, err := a.FromRows(ctx, rows)
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
 }
 
 /**********************************************************************
 * Helper to convert from an SQL Row to struct
 **********************************************************************/
+func (a *DBLatePatchingQueue) get_col_from_proto(p *savepb.LatePatchingQueue, colname string) interface{} {
+	if colname == "id" {
+		return a.get_ID(p)
+	} else if colname == "repositoryid" {
+		return a.get_RepositoryID(p)
+	} else if colname == "entrycreated" {
+		return a.get_EntryCreated(p)
+	} else if colname == "lastattempt" {
+		return a.get_LastAttempt(p)
+	}
+	panic(fmt.Sprintf("in table \"%s\", column \"%s\" cannot be resolved to proto field name", a.Tablename(), colname))
+}
+
 func (a *DBLatePatchingQueue) Tablename() string {
 	return a.SQLTablename
 }
@@ -313,18 +463,6 @@ func (a *DBLatePatchingQueue) SelectColsQualified() string {
 	return "" + a.SQLTablename + ".id," + a.SQLTablename + ".repositoryid, " + a.SQLTablename + ".entrycreated, " + a.SQLTablename + ".lastattempt"
 }
 
-func (a *DBLatePatchingQueue) FromRowsOld(ctx context.Context, rows *gosql.Rows) ([]*savepb.LatePatchingQueue, error) {
-	var res []*savepb.LatePatchingQueue
-	for rows.Next() {
-		foo := savepb.LatePatchingQueue{}
-		err := rows.Scan(&foo.ID, &foo.RepositoryID, &foo.EntryCreated, &foo.LastAttempt)
-		if err != nil {
-			return nil, a.Error(ctx, "fromrow-scan", err)
-		}
-		res = append(res, &foo)
-	}
-	return res, nil
-}
 func (a *DBLatePatchingQueue) FromRows(ctx context.Context, rows *gosql.Rows) ([]*savepb.LatePatchingQueue, error) {
 	var res []*savepb.LatePatchingQueue
 	for rows.Next() {
@@ -355,13 +493,13 @@ func (a *DBLatePatchingQueue) CreateTable(ctx context.Context) error {
 		`create sequence if not exists ` + a.SQLTablename + `_seq;`,
 		`CREATE TABLE if not exists ` + a.SQLTablename + ` (id integer primary key default nextval('` + a.SQLTablename + `_seq'),repositoryid bigint not null ,entrycreated integer not null ,lastattempt integer not null );`,
 		`CREATE TABLE if not exists ` + a.SQLTablename + `_archive (id integer primary key default nextval('` + a.SQLTablename + `_seq'),repositoryid bigint not null ,entrycreated integer not null ,lastattempt integer not null );`,
-		`ALTER TABLE latepatchingqueue ADD COLUMN IF NOT EXISTS repositoryid bigint not null default 0;`,
-		`ALTER TABLE latepatchingqueue ADD COLUMN IF NOT EXISTS entrycreated integer not null default 0;`,
-		`ALTER TABLE latepatchingqueue ADD COLUMN IF NOT EXISTS lastattempt integer not null default 0;`,
+		`ALTER TABLE ` + a.SQLTablename + ` ADD COLUMN IF NOT EXISTS repositoryid bigint not null default 0;`,
+		`ALTER TABLE ` + a.SQLTablename + ` ADD COLUMN IF NOT EXISTS entrycreated integer not null default 0;`,
+		`ALTER TABLE ` + a.SQLTablename + ` ADD COLUMN IF NOT EXISTS lastattempt integer not null default 0;`,
 
-		`ALTER TABLE latepatchingqueue_archive ADD COLUMN IF NOT EXISTS repositoryid bigint not null  default 0;`,
-		`ALTER TABLE latepatchingqueue_archive ADD COLUMN IF NOT EXISTS entrycreated integer not null  default 0;`,
-		`ALTER TABLE latepatchingqueue_archive ADD COLUMN IF NOT EXISTS lastattempt integer not null  default 0;`,
+		`ALTER TABLE ` + a.SQLTablename + `_archive  ADD COLUMN IF NOT EXISTS repositoryid bigint not null  default 0;`,
+		`ALTER TABLE ` + a.SQLTablename + `_archive  ADD COLUMN IF NOT EXISTS entrycreated integer not null  default 0;`,
+		`ALTER TABLE ` + a.SQLTablename + `_archive  ADD COLUMN IF NOT EXISTS lastattempt integer not null  default 0;`,
 	}
 
 	for i, c := range csql {
@@ -393,5 +531,6 @@ func (a *DBLatePatchingQueue) Error(ctx context.Context, q string, e error) erro
 	if e == nil {
 		return nil
 	}
-	return fmt.Errorf("[table="+a.SQLTablename+", query=%s] Error: %s", q, e)
+	return errors.Errorf("[table="+a.SQLTablename+", query=%s] Error: %s", q, e)
 }
+

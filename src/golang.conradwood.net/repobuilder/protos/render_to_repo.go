@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	pr "golang.conradwood.net/apis/protorenderer"
+	"golang.conradwood.net/go-easyops/errors"
 	"golang.conradwood.net/go-easyops/utils"
 	"path/filepath"
 )
@@ -35,7 +36,7 @@ func Compile(ctx context.Context, repoid uint64, dir, filename string) (*ProtoCo
 		fmt.Printf("NANOPB compile...\n")
 	}
 	if len(creq.Compilers) == 0 {
-		return nil, fmt.Errorf("unable to determine which compiler to use for this repo")
+		return nil, errors.Errorf("unable to determine which compiler to use for this repo")
 	}
 	cr, err := pr.GetProtoRendererClient().CompileFile(ctx, creq)
 	if err != nil {

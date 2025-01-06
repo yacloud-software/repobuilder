@@ -26,9 +26,13 @@ func (c *Creator) SubmitProto() error {
 	}
 	fn := c.tgr.ProtoFilename
 	c.Printf("Handling proto %s\n", fn)
-	b, err := utils.ReadFile(c.GitDir() + fn)
+	fullfile := c.GitDir() + fn
+	if !utils.FileExists(fullfile) {
+		return errors.Errorf("File \"%s\" does not exist", fullfile)
+	}
+	b, err := utils.ReadFile(fullfile)
 	if err != nil {
-		return err
+		return errors.Wrap(err)
 	}
 	err = c.RestoreContext()
 	if err != nil {
@@ -70,7 +74,7 @@ func (c *Creator) SubmitProto() error {
 		fmt.Printf("Saving proto file to \"%s\"\n", fname)
 		err = utils.WriteFile(fname, f.GetContent())
 		if err != nil {
-			return err
+			return errors.Wrap(err)
 		}
 		gname := strings.TrimPrefix(fname, c.GitDir())
 		gname = strings.TrimPrefix(gname, "/")
