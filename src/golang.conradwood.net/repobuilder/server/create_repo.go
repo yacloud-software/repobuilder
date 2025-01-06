@@ -160,7 +160,7 @@ func (c *Creator) create() {
 	if err != nil {
 		return
 	}
-	if c.SetError("loadcreatereq", c.LoadCreateReq()) {
+	if c.exe_step("loadcreatereq", c.LoadCreateReq) {
 		return
 	}
 	// execute stuff
@@ -169,19 +169,19 @@ func (c *Creator) create() {
 	// cleanup and store state afterwards
 
 	if c.needscommit {
-		if c.SetError("gitcommit", c.GitCommit()) {
+		if c.exe_step("gitcommit", c.GitCommit) {
 			return
 		}
-		c.tgr.SourceInstalled = true
 	}
 	c.SetGitHooks(true) // make sure we at least do a best effort attempt at re-enabling the githooks
 	if c.err == nil {
+		c.tgr.SourceInstalled = true
 		c.rcs.Success = true
 		c.tgr.Finalised = true
 	}
 
-	c.SetError("save_progress", c.SaveProgress()) // always save progress so far
-	c.SetError("save_status", c.SaveStatus())
+	c.exe_step("save_progress", c.SaveProgress) // always save progress so far
+	c.exe_step("save_status", c.SaveStatus)
 	details := fmt.Sprintf("[trackergitrepo id=%d, createwebreporequest id=%d, repocreatestatus id = %d] ", c.tgr.ID, c.req.ID, c.rcs.ID)
 	if c.err != nil {
 		c.Printf("%sGit repository %s at %s failed.\n", details, c.req.RepoName, c.GitCloneURL())
@@ -198,14 +198,15 @@ func (c *Creator) createWithCleanup() {
 	if c.tgr.PatchRepo {
 		c.Printf("Skipping PatchRepo\n")
 	} else {
-		if c.SetError("clonerepo_nopatch", c.CloneRepo()) {
+		if c.exe_step("clonerepo_nopatch", c.CloneRepo) {
 			return
 		}
 		s := fmt.Sprintf("created by repobuilder at %v\n", time.Now())
+		c.Printf("Writing repo_info.txt... file\n")
 		if c.SetError("write_info", utils.WriteFile(c.GitDir()+"repo_info.txt", []byte(s))) {
 			return
 		}
-		if c.SetError("add_nopatch", c.gitadd()) {
+		if c.exe_step("add_nopatch", c.gitadd) {
 			return
 		}
 		c.needscommit = true
@@ -214,7 +215,7 @@ func (c *Creator) createWithCleanup() {
 	if c.tgr.SourceInstalled {
 		c.Printf("Skipping SourceInstalled\n")
 	} else {
-		if c.SetError("modify_template", c.ModifyTemplate()) {
+		if c.exe_step("modify_template", c.ModifyTemplate) {
 			return
 		}
 	}
@@ -222,14 +223,14 @@ func (c *Creator) createWithCleanup() {
 	if c.tgr.ProtoSubmitted {
 		c.Printf("Skipping ProtoSubmitted\n")
 	} else {
-		if c.SetError("submit_proto", c.SubmitProto()) {
+		if c.exe_step("submit_proto", c.SubmitProto) {
 			return
 		}
 	}
 	if c.tgr.ProtoCommitted {
 		c.Printf("Skipping ProtoCommitted\n")
 	} else {
-		if c.SetError("clone_repo", c.CloneRepo()) {
+		if c.exe_step("clone_repo", c.CloneRepo) {
 			return
 		}
 
@@ -249,13 +250,13 @@ func (c *Creator) createWithCleanup() {
 		c.needscommit = true
 		c.tgr.ProtoCommitted = true
 	}
-	if c.SetError("create_service_account", c.CreateServiceAccount()) {
+	if c.exe_step("create_service_account", c.CreateServiceAccount) {
 		return
 	}
 	if c.tgr.SecureArgsCreated {
 		c.Printf("Skipping SecureArgsCreated\n")
 	} else {
-		if c.SetError("create_args", c.CreateSecureArgs()) {
+		if c.exe_step("create_args", c.CreateSecureArgs) {
 			return
 		}
 		c.tgr.SecureArgsCreated = true
@@ -263,7 +264,7 @@ func (c *Creator) createWithCleanup() {
 	if c.tgr.PermissionsCreated {
 		c.Printf("Skipping PermissionsCreated\n")
 	} else {
-		if c.SetError("create_permissions", c.CreatePermissions()) {
+		if c.exe_step("create_permissions", c.CreatePermissions) {
 			return
 		}
 		c.tgr.PermissionsCreated = true
@@ -623,6 +624,13 @@ func rungit(com []string, dir string, r io.Reader) (string, error) {
 		"HOME=" + git_home_dir,
 		"PATH=" + os.Getenv("PATH"),
 	})
-	out, err := l.SafelyExecuteWithDir([]string{"git", "commit", "-a", "-m", "new repository created"}, dir, r)
+	out, err := l.SafelyExecuteWithDir(com, dir, r)
 	return out, err
+}
+
+func (c *Creator) exe_step(name string, f func() error) bool {
+	c.Printf("executing step \"%s\"\n", name)
+	err := f()
+	b := c.SetError(name, err)
+	return b
 }

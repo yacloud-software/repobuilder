@@ -47,10 +47,9 @@ func main() {
 	TrackerLog_store = db.DefaultDBTrackerLog()
 	TrackerGitRepository_store = db.DefaultDBTrackerGitRepository()
 	RepoCreateStatus_store = db.DefaultDBRepoCreateStatus()
-	create_all_web_repos()
-
 	sd := server.NewServerDef()
 	sd.SetPort(*port)
+	sd.SetOnStartupCallback(startup)
 	sd.SetRegister(server.Register(
 		func(server *grpc.Server) error {
 			e := new(repoBuilderServer)
@@ -61,6 +60,11 @@ func main() {
 	err = server.ServerStartup(sd)
 	utils.Bail("Unable to start server", err)
 	os.Exit(0)
+}
+func startup() {
+	time.Sleep(time.Duration(1) * time.Second)
+	create_all_web_repos()
+
 }
 
 /************************************
