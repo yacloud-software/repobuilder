@@ -476,7 +476,7 @@ func (c *Creator) GitCloneSkel() error {
 	}
 	url := "https://git.conradwood.net/git/skel-go.git"
 	url = fmt.Sprintf("https://%s/git/%s", repo.Host, repo.Path)
-	c.Printf("Cloning git repo %s...\n", url)
+	c.Printf("Cloning git repo (skel) %s...\n", url)
 	c.GitSetAuth(url)
 	out, err := rungit([]string{"git", "clone", url, "repo"}, dir, nil)
 	if err != nil {
