@@ -4,6 +4,10 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"os"
+	"strings"
+	"time"
+
 	"golang.conradwood.net/apis/common"
 	gitpb "golang.conradwood.net/apis/gitserver"
 	oa "golang.conradwood.net/apis/objectauth"
@@ -16,9 +20,6 @@ import (
 	"golang.conradwood.net/repobuilder/db"
 	"golang.conradwood.net/repobuilder/latepatching"
 	"google.golang.org/grpc"
-	"os"
-	"strings"
-	"time"
 )
 
 const (
@@ -42,7 +43,7 @@ type repoBuilderServer struct {
 func main() {
 	var err error
 	flag.Parse()
-   server.SetHealth(common.Health_STARTING)
+	server.SetHealth(common.Health_STARTING)
 	fmt.Printf("Starting RepoBuilderServer...\n")
 	WebRepoRequest_store = db.DefaultDBCreateWebRepoRequest()
 	TrackerLog_store = db.DefaultDBTrackerLog()
@@ -65,7 +66,7 @@ func main() {
 func startup() {
 	time.Sleep(time.Duration(1) * time.Second)
 	create_all_web_repos()
-
+	server.SetHealth(common.Health_READY)
 }
 
 /************************************
@@ -393,4 +394,3 @@ func LanguageToRepo(language common.ProgrammingLanguage) uint64 {
 	}
 	return 0
 }
-
