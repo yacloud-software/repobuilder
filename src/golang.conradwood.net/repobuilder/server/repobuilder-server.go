@@ -42,6 +42,7 @@ type repoBuilderServer struct {
 func main() {
 	var err error
 	flag.Parse()
+   server.SetHealth(common.Health_STARTING)
 	fmt.Printf("Starting RepoBuilderServer...\n")
 	WebRepoRequest_store = db.DefaultDBCreateWebRepoRequest()
 	TrackerLog_store = db.DefaultDBTrackerLog()
@@ -392,3 +393,4 @@ func LanguageToRepo(language common.ProgrammingLanguage) uint64 {
 	}
 	return 0
 }
+
