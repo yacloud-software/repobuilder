@@ -55,6 +55,12 @@ type DBCreateWebRepoRequest struct {
 	lock                 sync.Mutex
 }
 
+func init() {
+	RegisterDBHandlerFactory(func() Handler {
+		return DefaultDBCreateWebRepoRequest()
+	})
+}
+
 func DefaultDBCreateWebRepoRequest() *DBCreateWebRepoRequest {
 	if default_def_DBCreateWebRepoRequest != nil {
 		return default_def_DBCreateWebRepoRequest
@@ -88,6 +94,10 @@ func (a *DBCreateWebRepoRequest) AddCustomColumnHandler(w CustomColumnHandler) {
 	a.lock.Lock()
 	a.customColumnHandlers = append(a.customColumnHandlers, w)
 	a.lock.Unlock()
+}
+
+func (a *DBCreateWebRepoRequest) NewQuery() *Query {
+	return newQuery(a)
 }
 
 // archive. It is NOT transactionally save.
@@ -190,6 +200,14 @@ func (a *DBCreateWebRepoRequest) saveMap(ctx context.Context, queryname string, 
 	return id, nil
 }
 
+// if ID==0 save, otherwise update
+func (a *DBCreateWebRepoRequest) SaveOrUpdate(ctx context.Context, p *savepb.CreateWebRepoRequest) error {
+	if p.ID == 0 {
+		_, err := a.Save(ctx, p)
+		return err
+	}
+	return a.Update(ctx, p)
+}
 func (a *DBCreateWebRepoRequest) Update(ctx context.Context, p *savepb.CreateWebRepoRequest) error {
 	qn := "DBCreateWebRepoRequest_Update"
 	_, e := a.DB.ExecContext(ctx, qn, "update "+a.SQLTablename+" set description=$1, name=$2, domain=$3, reponame=$4, servicename=$5, protodomain=$6 where id = $7", a.get_Description(p), a.get_Name(p), a.get_Domain(p), a.get_RepoName(p), a.get_ServiceName(p), a.get_ProtoDomain(p), p.ID)
@@ -492,8 +510,11 @@ func (a *DBCreateWebRepoRequest) ByDBQuery(ctx context.Context, query *Query) ([
 	i := 0
 	for col_name, value := range extra_fields {
 		i++
-		efname := fmt.Sprintf("EXTRA_FIELD_%d", i)
-		query.Add(col_name+" = "+efname, QP{efname: value})
+		/*
+		   efname:=fmt.Sprintf("EXTRA_FIELD_%d",i)
+		   query.Add(col_name+" = "+efname,QP{efname:value})
+		*/
+		query.AddEqual(col_name, value)
 	}
 
 	gw, paras := query.ToPostgres()

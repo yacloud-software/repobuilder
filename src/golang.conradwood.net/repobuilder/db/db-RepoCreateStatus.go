@@ -53,6 +53,12 @@ type DBRepoCreateStatus struct {
 	lock                 sync.Mutex
 }
 
+func init() {
+	RegisterDBHandlerFactory(func() Handler {
+		return DefaultDBRepoCreateStatus()
+	})
+}
+
 func DefaultDBRepoCreateStatus() *DBRepoCreateStatus {
 	if default_def_DBRepoCreateStatus != nil {
 		return default_def_DBRepoCreateStatus
@@ -86,6 +92,10 @@ func (a *DBRepoCreateStatus) AddCustomColumnHandler(w CustomColumnHandler) {
 	a.lock.Lock()
 	a.customColumnHandlers = append(a.customColumnHandlers, w)
 	a.lock.Unlock()
+}
+
+func (a *DBRepoCreateStatus) NewQuery() *Query {
+	return newQuery(a)
 }
 
 // archive. It is NOT transactionally save.
@@ -186,6 +196,14 @@ func (a *DBRepoCreateStatus) saveMap(ctx context.Context, queryname string, smap
 	return id, nil
 }
 
+// if ID==0 save, otherwise update
+func (a *DBRepoCreateStatus) SaveOrUpdate(ctx context.Context, p *savepb.RepoCreateStatus) error {
+	if p.ID == 0 {
+		_, err := a.Save(ctx, p)
+		return err
+	}
+	return a.Update(ctx, p)
+}
 func (a *DBRepoCreateStatus) Update(ctx context.Context, p *savepb.RepoCreateStatus) error {
 	qn := "DBRepoCreateStatus_Update"
 	_, e := a.DB.ExecContext(ctx, qn, "update "+a.SQLTablename+" set createrequestid=$1, createtype=$2, success=$3, error=$4 where id = $5", a.get_CreateRequestID(p), a.get_CreateType(p), a.get_Success(p), a.get_Error(p), p.ID)
@@ -418,8 +436,11 @@ func (a *DBRepoCreateStatus) ByDBQuery(ctx context.Context, query *Query) ([]*sa
 	i := 0
 	for col_name, value := range extra_fields {
 		i++
-		efname := fmt.Sprintf("EXTRA_FIELD_%d", i)
-		query.Add(col_name+" = "+efname, QP{efname: value})
+		/*
+		   efname:=fmt.Sprintf("EXTRA_FIELD_%d",i)
+		   query.Add(col_name+" = "+efname,QP{efname:value})
+		*/
+		query.AddEqual(col_name, value)
 	}
 
 	gw, paras := query.ToPostgres()

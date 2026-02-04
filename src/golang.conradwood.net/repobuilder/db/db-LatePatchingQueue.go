@@ -52,6 +52,12 @@ type DBLatePatchingQueue struct {
 	lock                 sync.Mutex
 }
 
+func init() {
+	RegisterDBHandlerFactory(func() Handler {
+		return DefaultDBLatePatchingQueue()
+	})
+}
+
 func DefaultDBLatePatchingQueue() *DBLatePatchingQueue {
 	if default_def_DBLatePatchingQueue != nil {
 		return default_def_DBLatePatchingQueue
@@ -85,6 +91,10 @@ func (a *DBLatePatchingQueue) AddCustomColumnHandler(w CustomColumnHandler) {
 	a.lock.Lock()
 	a.customColumnHandlers = append(a.customColumnHandlers, w)
 	a.lock.Unlock()
+}
+
+func (a *DBLatePatchingQueue) NewQuery() *Query {
+	return newQuery(a)
 }
 
 // archive. It is NOT transactionally save.
@@ -184,6 +194,14 @@ func (a *DBLatePatchingQueue) saveMap(ctx context.Context, queryname string, sma
 	return id, nil
 }
 
+// if ID==0 save, otherwise update
+func (a *DBLatePatchingQueue) SaveOrUpdate(ctx context.Context, p *savepb.LatePatchingQueue) error {
+	if p.ID == 0 {
+		_, err := a.Save(ctx, p)
+		return err
+	}
+	return a.Update(ctx, p)
+}
 func (a *DBLatePatchingQueue) Update(ctx context.Context, p *savepb.LatePatchingQueue) error {
 	qn := "DBLatePatchingQueue_Update"
 	_, e := a.DB.ExecContext(ctx, qn, "update "+a.SQLTablename+" set repositoryid=$1, entrycreated=$2, lastattempt=$3 where id = $4", a.get_RepositoryID(p), a.get_EntryCreated(p), a.get_LastAttempt(p), p.ID)
@@ -381,8 +399,11 @@ func (a *DBLatePatchingQueue) ByDBQuery(ctx context.Context, query *Query) ([]*s
 	i := 0
 	for col_name, value := range extra_fields {
 		i++
-		efname := fmt.Sprintf("EXTRA_FIELD_%d", i)
-		query.Add(col_name+" = "+efname, QP{efname: value})
+		/*
+		   efname:=fmt.Sprintf("EXTRA_FIELD_%d",i)
+		   query.Add(col_name+" = "+efname,QP{efname:value})
+		*/
+		query.AddEqual(col_name, value)
 	}
 
 	gw, paras := query.ToPostgres()

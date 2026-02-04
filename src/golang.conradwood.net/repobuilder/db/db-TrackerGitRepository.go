@@ -73,6 +73,12 @@ type DBTrackerGitRepository struct {
 	lock                 sync.Mutex
 }
 
+func init() {
+	RegisterDBHandlerFactory(func() Handler {
+		return DefaultDBTrackerGitRepository()
+	})
+}
+
 func DefaultDBTrackerGitRepository() *DBTrackerGitRepository {
 	if default_def_DBTrackerGitRepository != nil {
 		return default_def_DBTrackerGitRepository
@@ -106,6 +112,10 @@ func (a *DBTrackerGitRepository) AddCustomColumnHandler(w CustomColumnHandler) {
 	a.lock.Lock()
 	a.customColumnHandlers = append(a.customColumnHandlers, w)
 	a.lock.Unlock()
+}
+
+func (a *DBTrackerGitRepository) NewQuery() *Query {
+	return newQuery(a)
 }
 
 // archive. It is NOT transactionally save.
@@ -226,6 +236,14 @@ func (a *DBTrackerGitRepository) saveMap(ctx context.Context, queryname string, 
 	return id, nil
 }
 
+// if ID==0 save, otherwise update
+func (a *DBTrackerGitRepository) SaveOrUpdate(ctx context.Context, p *savepb.TrackerGitRepository) error {
+	if p.ID == 0 {
+		_, err := a.Save(ctx, p)
+		return err
+	}
+	return a.Update(ctx, p)
+}
 func (a *DBTrackerGitRepository) Update(ctx context.Context, p *savepb.TrackerGitRepository) error {
 	qn := "DBTrackerGitRepository_Update"
 	_, e := a.DB.ExecContext(ctx, qn, "update "+a.SQLTablename+" set createrequestid=$1, createtype=$2, repositoryid=$3, urlhost=$4, urlpath=$5, repositorycreated=$6, sourceinstalled=$7, packageid=$8, packagename=$9, protofilename=$10, protosubmitted=$11, protocommitted=$12, minprotoversion=$13, userid=$14, permissionscreated=$15, secureargscreated=$16, serviceid=$17, serviceuserid=$18, servicetoken=$19, finalised=$20, patchrepo=$21, sourcerepositoryid=$22, notificationsent=$23, artefactid=$24 where id = $25", a.get_CreateRequestID(p), a.get_CreateType(p), a.get_RepositoryID(p), a.get_URLHost(p), a.get_URLPath(p), a.get_RepositoryCreated(p), a.get_SourceInstalled(p), a.get_PackageID(p), a.get_PackageName(p), a.get_ProtoFilename(p), a.get_ProtoSubmitted(p), a.get_ProtoCommitted(p), a.get_MinProtoVersion(p), a.get_UserID(p), a.get_PermissionsCreated(p), a.get_SecureArgsCreated(p), a.get_ServiceID(p), a.get_ServiceUserID(p), a.get_ServiceToken(p), a.get_Finalised(p), a.get_PatchRepo(p), a.get_SourceRepositoryID(p), a.get_NotificationSent(p), a.get_ArtefactID(p), p.ID)
@@ -1158,8 +1176,11 @@ func (a *DBTrackerGitRepository) ByDBQuery(ctx context.Context, query *Query) ([
 	i := 0
 	for col_name, value := range extra_fields {
 		i++
-		efname := fmt.Sprintf("EXTRA_FIELD_%d", i)
-		query.Add(col_name+" = "+efname, QP{efname: value})
+		/*
+		   efname:=fmt.Sprintf("EXTRA_FIELD_%d",i)
+		   query.Add(col_name+" = "+efname,QP{efname:value})
+		*/
+		query.AddEqual(col_name, value)
 	}
 
 	gw, paras := query.ToPostgres()
