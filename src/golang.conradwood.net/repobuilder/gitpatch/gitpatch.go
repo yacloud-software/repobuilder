@@ -4,13 +4,15 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	gitpb "golang.conradwood.net/apis/gitserver"
-	"golang.conradwood.net/go-easyops/linux"
-	"golang.conradwood.net/go-easyops/utils"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	gitpb "golang.conradwood.net/apis/gitserver"
+	"golang.conradwood.net/go-easyops/linux"
+	"golang.conradwood.net/go-easyops/utils"
+	"golang.conradwood.net/repobuilder/gitrun"
 )
 
 type GitReference struct {
@@ -44,8 +46,6 @@ func GetRepoReferenceByID(ctx context.Context, repoid uint64) (*GitReference, er
 	}
 
 	gr := &GitReference{inuse: true}
-	l := linux.New()
-	l.SetMaxRuntime(time.Duration(300) * time.Second)
 	cc := GetNextCloneCounter()
 	gr.workdir = fmt.Sprintf("%s/%d/%d", *late_patch_workdir, repoid, cc)
 	gr.workdir, err = filepath.Abs(gr.workdir)
@@ -59,7 +59,8 @@ func GetRepoReferenceByID(ctx context.Context, repoid uint64) (*GitReference, er
 	url := fmt.Sprintf("https://%s/git//%s", surl.Host, surl.Path)
 	fmt.Printf("Cloning git repo %s into %s...\n", url, gr.workdir)
 	//	c.GitSetAuth(url)
-	out, err := l.SafelyExecuteWithDir([]string{"git", "clone", url, "repo"}, gr.workdir, nil)
+
+	out, err := gitrun.GitRun([]string{"git", "clone", url, "repo"}, gr.workdir)
 	if err != nil {
 		fmt.Printf("Error (clone). Git said: %s\n", out)
 		return nil, err
@@ -86,7 +87,7 @@ func (gr *GitReference) AddFile(filename string, content []byte) error {
 	fmt.Printf("Adding file \"%s\"\n", filename)
 	l := linux.New()
 	l.SetMaxRuntime(time.Duration(300) * time.Second)
-	out, err := l.SafelyExecuteWithDir([]string{"git", "add", filename}, gr.localgitdir, nil)
+	out, err := gitrun.GitRun([]string{"git", "add", filename}, gr.localgitdir)
 	if err != nil {
 		fmt.Printf("Error (add). Git said: %s\n", out)
 		return err
@@ -101,14 +102,14 @@ func (gr *GitReference) CommitAndPush() error {
 	fmt.Printf("Commit and Pushing...\n")
 	l := linux.New()
 	l.SetMaxRuntime(time.Duration(300) * time.Second)
-	out, err := l.SafelyExecuteWithDir([]string{"git", "commit", "-a", "-m", "repobuilder patches"}, gr.localgitdir, nil)
+	out, err := gitrun.GitRun([]string{"git", "commit", "-a", "-m", "repobuilder patches"}, gr.localgitdir)
 	if err != nil {
 		fmt.Printf("Error (commit). Git said: %s\n", out)
 		return err
 	}
 	l = linux.New()
 	l.SetMaxRuntime(time.Duration(300) * time.Second)
-	out, err = l.SafelyExecuteWithDir([]string{"git", "push"}, gr.localgitdir, nil)
+	out, err = gitrun.GitRun([]string{"git", "push"}, gr.localgitdir)
 	if err != nil {
 		fmt.Printf("Error (push). Git said: %s\n", out)
 		return err
@@ -120,9 +121,3 @@ func (gr *GitReference) CommitAndPush() error {
 func (gr *GitReference) GitDirAbsFilename() string {
 	return gr.localgitdir
 }
-
-
-
-
-
-
