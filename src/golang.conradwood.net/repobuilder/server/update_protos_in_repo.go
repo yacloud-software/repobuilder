@@ -3,11 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
-	"golang.conradwood.net/apis/protorenderer"
-	"golang.conradwood.net/go-easyops/utils"
 	"os"
 	"path/filepath"
 	"sync"
+
+	"golang.conradwood.net/apis/protorenderer"
+	"golang.conradwood.net/go-easyops/utils"
 )
 
 type process_package_state struct {
@@ -79,6 +80,10 @@ type process_package struct {
 
 // process a flatpackage
 func (pp *process_package) Process() {
+	utils.NotImpl("protorenderer is no longer supported")
+	if 1 == 1 {
+		return
+	}
 	id := &protorenderer.ID{ID: pp.p.ID}
 	fl, err := protorenderer.GetProtoRendererClient().GetFilesGO(pp.ctx, id)
 	if err != nil {

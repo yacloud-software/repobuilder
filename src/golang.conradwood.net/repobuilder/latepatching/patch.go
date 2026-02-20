@@ -3,16 +3,18 @@ package latepatching
 import (
 	"bytes"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"text/template"
+	"unicode"
+
 	gitpb "golang.conradwood.net/apis/gitserver"
 	pb "golang.conradwood.net/apis/repobuilder"
 	"golang.conradwood.net/go-easyops/authremote"
 	"golang.conradwood.net/go-easyops/utils"
 	"golang.conradwood.net/repobuilder/gitpatch"
 	"golang.conradwood.net/repobuilder/protos"
-	"os"
-	"path/filepath"
-	"strings"
-	"text/template"
 )
 
 type TemplateData struct {
@@ -49,7 +51,7 @@ func patch(lpq *pb.LatePatchingQueue) error {
 	td := &TemplateData{
 		FQDN_GO_PROTOPACKAGE: to_fqdn_go_proto_package_name(protofilename),
 		GO_PROTOPACKAGE:      to_proto_package_name(repo.ArtefactName),
-		JAVA_PROTOPACKAGE:    "repobuilder.latepatching does not yet support java packages",
+		JAVA_PROTOPACKAGE:    to_java_package_name(protofilename),
 	}
 	content, err := create_patch_file("protofile.template", td)
 	if err != nil {
@@ -136,8 +138,34 @@ func to_fqdn_go_proto_package_name(pkg_name string) string {
 	return res
 }
 
+// wants a path, like "protos/golang.yacloud.eu/apis/foo/foo.proto"
+func to_java_package_name(pkg_name string) string {
+	host_and_path := strings.TrimPrefix(pkg_name, "protos/")
+	parts := strings.Split(host_and_path, "/")
+	if len(parts) < 2 {
+		return "__error_in_pkg_name_conversion_to_java for \"" + pkg_name + "\"___"
+	}
+	res := domains2java(parts[0])
+	parts = parts[1:]            // remove host
+	parts = parts[:len(parts)-1] // remove filename
+	for _, p := range parts {
+		if len(p) == 0 {
+			continue
+		}
+		if unicode.IsDigit(rune(p[0])) {
+			p = "int" + p
+		}
+		res = res + "." + p
+	}
+	return res
+}
 
-
-
-
-
+// "www.singingcat.net" -> "net.singingcat.www"
+func domains2java(dotted string) string {
+	xs := strings.Split(dotted, ".")
+	xres := make([]string, len(xs))
+	for i, _ := range xs {
+		xres[len(xs)-i-1] = xs[i]
+	}
+	return strings.Join(xres, ".")
+}

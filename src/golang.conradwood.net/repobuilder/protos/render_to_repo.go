@@ -3,10 +3,11 @@ package protos
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+
 	pr "golang.conradwood.net/apis/protorenderer"
 	"golang.conradwood.net/go-easyops/errors"
 	"golang.conradwood.net/go-easyops/utils"
-	"path/filepath"
 )
 
 type ProtoCompileResult struct {
@@ -18,6 +19,11 @@ type File struct {
 }
 
 func Compile(ctx context.Context, repoid uint64, dir, filename string) (*ProtoCompileResult, error) {
+	utils.NotImpl("protorenderer is no longer supported (repoid=%d, filename=%s)", repoid, filename)
+	if 1 == 1 {
+		return &ProtoCompileResult{}, nil
+	}
+
 	fmt.Printf("Compiling %s\n", dir+"/"+filename)
 	b, err := utils.ReadFile(dir + "/" + filename)
 	if err != nil {

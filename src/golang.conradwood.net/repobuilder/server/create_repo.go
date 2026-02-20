@@ -4,6 +4,8 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"os"
+
 	"golang.conradwood.net/apis/artefact"
 	"golang.conradwood.net/apis/buildrepo"
 	"golang.conradwood.net/apis/common"
@@ -13,11 +15,8 @@ import (
 	"golang.conradwood.net/go-easyops/auth"
 	"golang.conradwood.net/go-easyops/authremote"
 	"golang.conradwood.net/go-easyops/errors"
-	"golang.conradwood.net/go-easyops/linux"
-	"golang.conradwood.net/go-easyops/tokens"
 	"golang.conradwood.net/go-easyops/utils"
-	"io"
-	"os"
+	"golang.conradwood.net/repobuilder/gitrun"
 
 	//	"path/filepath"
 	"strings"
@@ -26,7 +25,6 @@ import (
 )
 
 var (
-	git_home_dir     string
 	git_max_run_time = flag.Duration("git_max_runtime", time.Duration(600)*time.Second, "max runtime in seconds of a git process before it is killed")
 	git_dir          = flag.String("git_dir", "/tmp/git_dirs", "the directory in which to clone git")
 	creatorLock      sync.Mutex
@@ -82,7 +80,7 @@ func create_web_repo(req *pb.TrackerGitRepository) error {
 	if req.Finalised {
 		return nil
 	}
-	err := createGitConfig()
+	err := gitrun.CreateGitConfig()
 	if err != nil {
 		return errors.Errorf("failed to create git config %w", err)
 	}
@@ -98,7 +96,7 @@ func trigger_create_web_repo(req *pb.TrackerGitRepository) error {
 	if req.Finalised {
 		return nil
 	}
-	err := createGitConfig()
+	err := gitrun.CreateGitConfig()
 	if err != nil {
 		return err
 	}
@@ -301,12 +299,12 @@ func (c *Creator) GitCommit() error {
 	os.MkdirAll(dir, 0777)
 	url := c.GitCloneURL()
 	c.GitSetAuth(url)
-	out, err := rungit([]string{"git", "commit", "-a", "-m", "new repository created"}, dir, nil)
+	out, err := rungit([]string{"git", "commit", "-a", "-m", "new repository created"}, dir)
 	if err != nil {
 		c.Printf("Error Committing (%s). Git said: %s\n", err, out)
 		return err
 	}
-	out, err = rungit([]string{"git", "push", "--set-upstream", "origin", "master"}, dir, nil)
+	out, err = rungit([]string{"git", "push", "--set-upstream", "origin", "master"}, dir)
 	if err != nil {
 		c.Printf("Error Push. Git said: %s\n", out)
 		return err
@@ -457,7 +455,7 @@ func (c *Creator) GitClone() error {
 	url := c.GitCloneURL()
 	c.Printf("Cloning git repo %s...\n", url)
 	c.GitSetAuth(url)
-	out, err := rungit([]string{"git", "clone", url, "repo"}, dir, nil)
+	out, err := rungit([]string{"git", "clone", url, "repo"}, dir)
 	if err != nil {
 		c.Printf("Error. Git said: %s\n", out)
 		return err
@@ -479,7 +477,7 @@ func (c *Creator) GitCloneSkel() error {
 	url = fmt.Sprintf("https://%s/git/%s", repo.Host, repo.Path)
 	c.Printf("Cloning git repo (skel) %s...\n", url)
 	c.GitSetAuth(url)
-	out, err := rungit([]string{"git", "clone", url, "repo"}, dir, nil)
+	out, err := rungit([]string{"git", "clone", url, "repo"}, dir)
 	if err != nil {
 		c.Printf("Error. Git said: %s\n", out)
 		return err
@@ -557,26 +555,6 @@ func (c *Creator) Printf(format string, args ...interface{}) {
 	fmt.Printf("%s%s", prefix, s)
 }
 
-// write a git config into ~/.gitconfig which authenticates us as repobuilder
-func createGitConfig() error {
-	h, err := utils.HomeDir()
-	if err != nil {
-		return errors.Errorf("failed to get homedir %w", err)
-	}
-	git_home_dir = h + "/repobuilder"
-	gitconfig := `[user]
-        name = RepoBuilder
-        email = repobuilder@services.yacloud.eu
-
-[http]
-        postBuffer = 524288000
-        extraHeader = "Authorization: Bearer %s"
-`
-	gc := fmt.Sprintf(gitconfig, tokens.GetServiceTokenParameter())
-	err = utils.WriteFileCreateDir(git_home_dir+"/.gitconfig", []byte(gc))
-	return err
-}
-
 func (c *Creator) getGitRepo(repoid uint64) (*gitpb.SourceRepositoryURL, error) {
 	ctx := c.ctx
 	bir := &gitpb.ByIDRequest{ID: repoid}
@@ -617,15 +595,9 @@ func (c *Creator) notifyCreated() {
 	}
 }
 
-func rungit(com []string, dir string, r io.Reader) (string, error) {
-	l := linux.New()
-	l.SetMaxRuntime(*git_max_run_time)
-	l.SetEnvironment([]string{
-		"HOME=" + git_home_dir,
-		"PATH=" + os.Getenv("PATH"),
-	})
-	out, err := l.SafelyExecuteWithDir(com, dir, r)
-	return out, err
+func rungit(com []string, dir string) (string, error) {
+	ctx := authremote.ContextWithTimeout(time.Duration(50) * time.Second)
+	return gitrun.GitRun(ctx, com, dir)
 }
 
 func (c *Creator) exe_step(name string, f func() error) bool {

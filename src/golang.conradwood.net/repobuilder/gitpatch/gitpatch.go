@@ -10,20 +10,20 @@ import (
 	"time"
 
 	gitpb "golang.conradwood.net/apis/gitserver"
-	"golang.conradwood.net/go-easyops/authremote"
 	"golang.conradwood.net/go-easyops/linux"
 	"golang.conradwood.net/go-easyops/utils"
 	"golang.conradwood.net/repobuilder/gitrun"
 )
 
 type GitReference struct {
-	repoid       uint64
-	commit       string
-	localgitdir  string // top of git repository
-	workdir      string
-	inuse        bool
-	addedfiles   []string
-	needs_commit bool
+	repoid        uint64
+	commit        string
+	localgitdir   string // top of git repository
+	workdir       string
+	inuse         bool
+	addedfiles    []string
+	needs_commit  bool
+	first_context context.Context
 }
 
 var (
@@ -46,7 +46,7 @@ func GetRepoReferenceByID(ctx context.Context, repoid uint64) (*GitReference, er
 		return nil, err
 	}
 
-	gr := &GitReference{inuse: true}
+	gr := &GitReference{inuse: true, first_context: ctx}
 	cc := GetNextCloneCounter()
 	gr.workdir = fmt.Sprintf("%s/%d/%d", *late_patch_workdir, repoid, cc)
 	gr.workdir, err = filepath.Abs(gr.workdir)
@@ -123,5 +123,6 @@ func (gr *GitReference) GitDirAbsFilename() string {
 	return gr.localgitdir
 }
 func (gr *GitReference) Context() context.Context {
-	return authremote.ContextWithTimeout(time.Duration(180) * time.Second)
+	//	return authremote.ContextWithTimeout(time.Duration(180) * time.Second)
+	return gr.first_context
 }
