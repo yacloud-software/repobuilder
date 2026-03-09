@@ -1,21 +1,21 @@
 module golang.conradwood.net/repobuilder
 
-go 1.24.0
+go 1.25.0
 
 require (
 	golang.conradwood.net/apis/artefact v1.1.4406
-	golang.conradwood.net/apis/auth v1.1.4424
+	golang.conradwood.net/apis/auth v1.1.4445
 	golang.conradwood.net/apis/buildrepo v1.1.4406
-	golang.conradwood.net/apis/common v1.1.4424
+	golang.conradwood.net/apis/common v1.1.4445
 	golang.conradwood.net/apis/email v1.1.4406
 	golang.conradwood.net/apis/gitserver v1.1.4406
 	golang.conradwood.net/apis/objectauth v1.1.4406
 	golang.conradwood.net/apis/protorenderer v1.1.4406
 	golang.conradwood.net/apis/repobuilder v1.1.1652
 	golang.conradwood.net/apis/secureargs v1.1.4406
-	golang.conradwood.net/go-easyops v0.1.39553
+	golang.conradwood.net/go-easyops v0.1.39643
 	golang.yacloud.eu/apis/protomanager v1.1.4406
-	google.golang.org/grpc v1.78.0
+	google.golang.org/grpc v1.79.1
 )
 
 require (
@@ -38,24 +38,24 @@ require (
 	golang.conradwood.net/apis/deploymonkey v1.1.4424 // indirect
 	golang.conradwood.net/apis/errorlogger v1.1.4424 // indirect
 	golang.conradwood.net/apis/getestservice v1.1.4424 // indirect
-	golang.conradwood.net/apis/goeasyops v1.1.4424 // indirect
+	golang.conradwood.net/apis/goeasyops v1.1.4445 // indirect
 	golang.conradwood.net/apis/grafanadata v1.1.4424 // indirect
 	golang.conradwood.net/apis/h2gproxy v1.1.4424 // indirect
 	golang.conradwood.net/apis/objectstore v1.1.4424 // indirect
 	golang.conradwood.net/apis/registry v1.1.4424 // indirect
-	golang.org/x/net v0.49.0 // indirect
-	golang.org/x/sys v0.40.0 // indirect
-	golang.org/x/text v0.33.0 // indirect
+	golang.org/x/net v0.51.0 // indirect
+	golang.org/x/sys v0.41.0 // indirect
+	golang.org/x/text v0.34.0 // indirect
 	golang.yacloud.eu/apis/autodeployer2 v1.1.4424 // indirect
 	golang.yacloud.eu/apis/autodeployercommon v1.1.4424 // indirect
 	golang.yacloud.eu/apis/faultindicator v1.1.4424 // indirect
 	golang.yacloud.eu/apis/fscache v1.1.4424 // indirect
 	golang.yacloud.eu/apis/protorenderer2 v1.1.4406 // indirect
-	golang.yacloud.eu/apis/session v1.1.4424 // indirect
+	golang.yacloud.eu/apis/session v1.1.4445 // indirect
 	golang.yacloud.eu/apis/unixipc v1.1.4424 // indirect
 	golang.yacloud.eu/apis/urlcacher v1.1.4424 // indirect
 	golang.yacloud.eu/unixipc v0.1.31725 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20251029180050-ab9386a59fda // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
