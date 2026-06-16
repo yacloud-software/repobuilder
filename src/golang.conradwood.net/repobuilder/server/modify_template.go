@@ -34,6 +34,12 @@ func (c *Creator) ModifyTemplate() error {
 	c.needscommit = true
 	return nil
 }
+
+// e.g. golang.conradwood.net/repobuilder
+func (c *Creator) GoPackage() string {
+	res := c.GoDomainDir() + "/" + c.req.Name
+	return strings.ToLower(res)
+}
 func (c *Creator) GoDomainDir() string {
 	s := "golang." + c.req.Domain
 	return strings.ToLower(s)
@@ -84,7 +90,7 @@ func (c *Creator) ProtoPackagePrefix() string {
 	return s
 }
 
-// e.g. /fulldir/src/golang.conradwood.net/repobuilder
+// e.g. /fulldir/src/golang.conradwood.net/repobuilder/vendor
 func (c *Creator) GoVendorDir() string {
 	s := c.GitDir() + "/src/golang." + c.req.Domain + "/vendor"
 	return strings.ToLower(s)
@@ -112,7 +118,7 @@ func (c *Creator) moveFiles() error {
 	os.MkdirAll(s, 0777)
 
 	templdir := c.GitDir() + "/src/golang.conradwood.net/template"
-	// rename the client/server .go
+	// rename the client/server/exe .go
 	err := os.Rename(templdir+"/client/template-client.go", templdir+"/client/"+c.shortName()+"-client.go")
 	if err != nil {
 		return err
@@ -121,6 +127,7 @@ func (c *Creator) moveFiles() error {
 	if err != nil {
 		return err
 	}
+
 	// copy the template dir
 	err = linux.CopyDir(templdir, s)
 	if err != nil {
@@ -176,9 +183,10 @@ func (c *Creator) modifyFile(absfile string) error {
 		&replace{orig: "PROTOPACKAGE", repl: c.ProtoPackageName()},
 		&replace{orig: "PROTOIMPORTPATH", repl: c.GoProtoImportPath()},
 		&replace{orig: "SERVICENAME", repl: c.ServiceName()},
-		&replace{orig: "GODOMAIN", repl: c.GoDomainDir()},
+		&replace{orig: "GOPACKAGE", repl: c.GoPackage()},  // e.g. "golang.conradwood.net/repobuilder"
+		&replace{orig: "GODOMAIN", repl: c.GoDomainDir()}, // e.g. "golang.yacloud.eu"
 		&replace{orig: "golang.conradwood.net/template/appinfo", repl: c.GoDomainDir() + "/" + c.req.Name + "/appinfo"},
-		&replace{orig: "golang.conradwood.net/template", repl: c.GoDomainDir() + "/" + c.req.Name},
+		&replace{orig: "golang.conradwood.net/template", repl: c.GoPackage()},
 		&replace{orig: "JAVAPACKAGE", repl: c.ProtoJavaPackageName()},
 		&replace{orig: "REPOSITORYID", repl: c.RepositoryIDString()},
 		&replace{orig: `pb "golang.conradwood.net/apis/echoservice"`, repl: "pb \"" + c.GoProtoImportPath() + "\""},
